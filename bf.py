@@ -204,7 +204,7 @@ class BilateralFilter(MessagePassing):
         deg = self._weighted_degree(col, edge_weight, n_nodes)
         norm = deg.pow(-1.)
         norm = norm[row] # norm[i] = norm[row[i] ~ indexof(x_i)]
-        sprint(norm)
+        sprint(norm, norm.max(), norm.mean(), norm.min())
         # => E * 1
         
         return self.propagate(edge_index, x=x, norm=norm)
