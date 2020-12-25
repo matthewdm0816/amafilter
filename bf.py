@@ -18,6 +18,15 @@ scaf = Scaffold()
 scaf.debug()
 sprint = scaf.print
 
+def init_weights(model):
+    import torch.nn.init as init
+    for m in model.modules():
+        if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
+            init.xavier_uniform_(m.weight.data, gain=nn.init.calculate_gain('relu'))
+        elif isinstance(m, nn.BatchNorm1d):
+            m.weight.data.fill_(1)
+            m.bias.data.zero_()
+
 class layers():
     def __init__(self, ns):
         self.ns = ns
@@ -102,7 +111,7 @@ class Weight(nn.Module):
         collate:
             gaussian ~ exp(-t^2)
             exponential ~ exp(-t)
-            fractional ~ 1/x
+            fractional ~ 1/x^2
         kwargs:
             for linear, fout=Int
             for MLP, hidden_layers=[Int]
@@ -111,6 +120,7 @@ class Weight(nn.Module):
             - Use more embedding
         """
         super().__init__()
+        eps = 1e-8 # for numerical stability
         try:
             fout = kwargs["fout"]
         except KeyError: 
@@ -132,15 +142,15 @@ class Weight(nn.Module):
         self.collate = collate
         if collate == 'gaussian':
             self.out = module_wrapper(lambda x:
-                torch.exp(-x ** 2)
+                torch.exp(-(x+eps) ** 2)
             )
         elif collate == 'exponential':
             self.out = module_wrapper(lambda x:
-                torch.exp(-x)
+                torch.exp(-(x+eps))
             )
         elif collate == 'fractional':
             self.out = module_wrapper(lambda x:
-                x ** (-1)
+                (x+eps) ** (-2)
             )
         
     def forward(self, x1, x2):
@@ -151,10 +161,12 @@ class Weight(nn.Module):
         f1, f2 = self.embedding(x1), self.embedding(x2)
         distance = torch.norm(f1 - f2, dim=1)
         # xs = self.concat([x1, x2], dim=1) 
-        # # TODO: make it variable 
+        # # TODO: make it single
         # distance = torch.norm(self.embedding(xs), dim=1)
         # # TODO: norm?
-        return self.out(distance)
+        eps = 1e-8 # numerical stability sake
+        sprint(distance)
+        return self.out(distance + eps)
 
 class BilateralFilter(MessagePassing):
     def __init__(self, fin, fout):
@@ -196,15 +208,17 @@ class BilateralFilter(MessagePassing):
         # Compute edge weight
         row, col = edge_index
         x_i, x_j = x[row], x[col]
+        # sprint(x_i, x_j)
         edge_weight = self._edge_weight(x_i, x_j)
-        sprint(edge_weight)
+        # FIXME: Why so small?
+        sprint(edge_weight, edge_weight.max(), edge_weight.median(), edge_weight.min())
 
         # Compute normalization W = D^{-1}W ~ RW
         # TODO: Variable Norm, Sym/None
         deg = self._weighted_degree(col, edge_weight, n_nodes)
         norm = deg.pow(-1.)
         norm = norm[row] # norm[i] = norm[row[i] ~ indexof(x_i)]
-        sprint(norm, norm.max(), norm.mean(), norm.min())
+        sprint(norm, norm.max(), norm.median(), norm.min())
         # => E * 1
         
         return self.propagate(edge_index, x=x, norm=norm)
@@ -233,22 +247,28 @@ if __name__ == "__main__":
     """
     Unit test of BF
     """
-    print(colorama.Fore.MAGENTA + "Testing BF")
-    # Compose data
-    l = 1000
-    x = torch.randn([l, 6])
-    edge_index = [
-        [i, random.randint(0, l-1)] for i in range(l)
-    ] # of 1%% edges
-    edge_index = edge_index + [
-        [e[1], e[0]] for e in edge_index
-    ] # make symmetric
-    edge_index = torch.tensor(edge_index).transpose(0, 1)
-    print(edge_index.shape)
+    with torch.no_grad():
+        print(colorama.Fore.MAGENTA + "Testing BF")
+        # Compose data
+        l = 30
+        x = torch.randn([l, 6])
+        choices = [list(range(l)) for _ in range(l)]
+        for i, c in enumerate(choices):
+            c.remove(i)
+        edge_index = [
+            [i, random.choice(seq)] for i, seq in enumerate(choices)
+        ] # of 1%% edges
+        print(edge_index)
+        edge_index = edge_index + [
+            [e[1], e[0]] for e in edge_index
+        ] # make symmetric
+        edge_index = torch.tensor(edge_index).transpose(0, 1)
+        print(edge_index.shape)
 
-    # Model and verification
-    model = BilateralFilter(6, 6)
-    x = model(x, edge_index)
-    print(x.mean(), x.max(), x.min())
+        # Model and verification
+        model = BilateralFilter(6, 6)
+        init_weights(model)
+        x = model(x, edge_index)
+        print(x.max(), x.median(), x.min())
 
 
