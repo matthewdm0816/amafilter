@@ -10,7 +10,13 @@ from torch_geometric.data import DataLoader
 from torch_geometric.utils import degree, get_laplacian, remove_self_loops
 import torch_scatter as tscatter
 import numpy as np
-import random, math
+import random, math, colorama
+from tqdm import *
+from scaffold import Scaffold
+
+scaf = Scaffold()
+scaf.debug()
+sprint = scaf.print
 
 class layers():
     def __init__(self, ns):
@@ -55,7 +61,7 @@ def module_wrapper(f):
         def forward(self, x):
             return f(x)
     
-    return module
+    return module()
 
 
 class MLP(nn.Module):
@@ -143,7 +149,7 @@ class Weight(nn.Module):
         Output: w ~ N * 1?
         """
         f1, f2 = self.embedding(x1), self.embedding(x2)
-        distance = torch.norm(f1 - f2)
+        distance = torch.norm(f1 - f2, dim=1)
         # xs = self.concat([x1, x2], dim=1) 
         # # TODO: make it variable 
         # distance = torch.norm(self.embedding(xs), dim=1)
@@ -156,15 +162,16 @@ class BilateralFilter(MessagePassing):
         self.fproj = nn.Linear(fin, fout)
         self.weight = Weight(fin, embedding='linear', collate='gaussian')
 
-    def _weighted_degree(edge_index, edge_weight, num_nodes):
+    def _weighted_degree(self, edge_index, edge_weight, num_nodes):
         """
         edge_index ~ [E, ] of to-index of an edge
         edge_weight ~ [E, ]
         Return ~ [N, ]
         """
         # normalize
+        # sprint(edge_index.shape, edge_weight.shape, num_nodes)
         out = torch.zeros((num_nodes, )).to(edge_weight)
-        return out.scatter_add_(dim=0, index=index, src=edge_weight)
+        return out.scatter_add_(dim=0, index=edge_index, src=edge_weight)
 
     def _edge_weight(self, x_i, x_j):
         """
@@ -190,36 +197,58 @@ class BilateralFilter(MessagePassing):
         row, col = edge_index
         x_i, x_j = x[row], x[col]
         edge_weight = self._edge_weight(x_i, x_j)
+        sprint(edge_weight)
 
         # Compute normalization W = D^{-1}W ~ RW
-        # TODO: Variable Norm
+        # TODO: Variable Norm, Sym/None
         deg = self._weighted_degree(col, edge_weight, n_nodes)
         norm = deg.pow(-1.)
         norm = norm[row] # norm[i] = norm[row[i] ~ indexof(x_i)]
+        sprint(norm)
         # => E * 1
         
         return self.propagate(edge_index, x=x, norm=norm)
 
 if __name__ == "__main__":
+    colorama.init(autoreset=True)
     """
     Unit test of module_wrapper
     """
-    m = module_wrapper(lambda x:)
+    print(colorama.Fore.MAGENTA + "Testing module_wrapper")
+    m = module_wrapper(lambda x: x.pow(-2))
+    x = torch.randn([100, 10])
+    x = m(x)
+    print(x.max())
+
+    """
+    Unit test of Weight
+    """
+    print(colorama.Fore.MAGENTA + "Testing Weight")
+    m = Weight(fin=10, embedding='linear', collate='gaussian')
+    x_i = torch.randn([20, 10])
+    x_j = torch.randn([20, 10])
+    dist = m(x_i, x_j) # E * 1
+    print(dist.shape, dist)
 
     """
     Unit test of BF
     """
+    print(colorama.Fore.MAGENTA + "Testing BF")
     # Compose data
     l = 1000
     x = torch.randn([l, 6])
-    edge_index = torch.tensor([
-        [i, j] for i in range(l) for j in range(l) if random.random() > 0.999 
-    ]).transpose(0, 1) # of 1%% edges
-    print(edge_index, edge_index.shape)
+    edge_index = [
+        [i, random.randint(0, l-1)] for i in range(l)
+    ] # of 1%% edges
+    edge_index = edge_index + [
+        [e[1], e[0]] for e in edge_index
+    ] # make symmetric
+    edge_index = torch.tensor(edge_index).transpose(0, 1)
+    print(edge_index.shape)
 
     # Model and verification
     model = BilateralFilter(6, 6)
-    x, edge_index = model(x, edge_index)
-    print(x)
+    x = model(x, edge_index)
+    print(x.mean(), x.max(), x.min())
 
 
