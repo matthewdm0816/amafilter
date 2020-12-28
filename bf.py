@@ -13,64 +13,11 @@ import numpy as np
 import random, math, colorama
 from tqdm import *
 from scaffold import Scaffold
+from utils import init_weights, layers, module_wrapper
 
 scaf = Scaffold()
 scaf.debug()
 sprint = scaf.print
-
-def init_weights(model):
-    import torch.nn.init as init
-    for m in model.modules():
-        if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
-            init.xavier_uniform_(m.weight.data, gain=nn.init.calculate_gain('relu'))
-        elif isinstance(m, nn.BatchNorm1d):
-            m.weight.data.fill_(1)
-            m.bias.data.zero_()
-
-class layers():
-    def __init__(self, ns):
-        self.ns = ns
-        self.iter1 = iter(ns)
-        self.iter2 = iter(ns) # iterator of latter element
-        next(self.iter2)
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        return (next(self.iter1), 
-                next(self.iter2))
-
-class GaussianLayer(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x):
-        return F.exp(-x ** 2)
-
-class ExponentialLayer(nn.Module):
-    def __init__(self):
-        super().__init__()
-    
-    def forward(self, x):
-        return F.exp(-x)
-
-class InverseLayer(nn.Module):
-    def __init__(self):
-        super().__init__()
-    
-    def forward(self, x):
-        return x.pow(-2)
-
-def module_wrapper(f):
-    class module(nn.Module):
-        def __init__(self):
-            super().__init__()
-        
-        def forward(self, x):
-            return f(x)
-    
-    return module()
 
 
 class MLP(nn.Module):
@@ -102,6 +49,7 @@ class MLP(nn.Module):
     def forward(self, x):
         return self.net(x)
 
+
 class Weight(nn.Module):
     def __init__(self, fin, embedding='linear', collate='gaussian', **kwargs):
         """
@@ -120,7 +68,6 @@ class Weight(nn.Module):
             - Use more embedding
         """
         super().__init__()
-        eps = 1e-8 # for numerical stability
         try:
             fout = kwargs["fout"]
         except KeyError: 
@@ -142,18 +89,18 @@ class Weight(nn.Module):
         self.collate = collate
         if collate == 'gaussian':
             self.out = module_wrapper(lambda x:
-                torch.exp(-(x+eps) ** 2)
+                torch.exp(-(x) ** 2)
             )
         elif collate == 'exponential':
             self.out = module_wrapper(lambda x:
-                torch.exp(-(x+eps))
+                torch.exp(-(x))
             )
         elif collate == 'fractional':
             self.out = module_wrapper(lambda x:
-                (x+eps) ** (-2)
+                (x) ** (-2)
             )
         
-    def forward(self, x1, x2):
+    def forward(self, x1, x2, eps=1e-9):
         """
         Input: x1, x2 ~ N * F
         Output: w ~ N * 1?
@@ -162,11 +109,11 @@ class Weight(nn.Module):
         distance = torch.norm(f1 - f2, dim=1)
         # xs = self.concat([x1, x2], dim=1) 
         # # TODO: make it single
-        # distance = torch.norm(self.embedding(xs), dim=1)
-        # # TODO: norm?
-        eps = 1e-8 # numerical stability sake
-        sprint(distance)
-        return self.out(distance + eps)
+
+        # increase numerical stability, using eps
+        # sprint(distance)
+        return self.out(distance) + eps
+
 
 class BilateralFilter(MessagePassing):
     def __init__(self, fin, fout):
@@ -210,7 +157,7 @@ class BilateralFilter(MessagePassing):
         x_i, x_j = x[row], x[col]
         # sprint(x_i, x_j)
         edge_weight = self._edge_weight(x_i, x_j)
-        # FIXME: Why so small?
+        # FIXME: Why so small? far distance in initial embeddings
         sprint(edge_weight, edge_weight.max(), edge_weight.median(), edge_weight.min())
 
         # Compute normalization W = D^{-1}W ~ RW
@@ -222,6 +169,11 @@ class BilateralFilter(MessagePassing):
         # => E * 1
         
         return self.propagate(edge_index, x=x, norm=norm)
+
+
+class Denoiser(nn.Module):
+    # TODO: Add Denoiser and Unit Tests
+    pass
 
 if __name__ == "__main__":
     colorama.init(autoreset=True)
@@ -246,6 +198,7 @@ if __name__ == "__main__":
 
     """
     Unit test of BF
+    FIXME: at earliest iterations, weights are big/small => numerical instability, added eps threshold
     """
     with torch.no_grad():
         print(colorama.Fore.MAGENTA + "Testing BF")
