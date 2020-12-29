@@ -109,7 +109,7 @@ if __name__ == "__main__":
                 },
                 f
             )
-    
+
     # model and data path
     model_name = 'modelnet40-bf'
     model_path = os.path.join('model', model_name, timestamp)
@@ -136,7 +136,10 @@ if __name__ == "__main__":
         loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
 
-    # model, optimizer, scheduler
+    # tensorboard writer
+    writer = SummaryWriter(comment=model_name)  # global steps => index of epoch
+
+    # model, optimizer, scheduler declaration
     model = AmaFilter(6, 6)
     optimizer = optim.Adam([{'params': model.parameters(), 'initial_lr': 0.002}],
                                 lr=0.002, weight_decay=5e-4, betas=(0.9, 0.999))
@@ -149,6 +152,12 @@ if __name__ == "__main__":
     else:
         init_weights(model)
 
-    
+    batch_cnt = len(loader)
+    print(colorama.Fore.MAGENTA + "Begin training with: batch size %d, %d batches in total" % (batch_size, batch_cnt))
+
+    for e in trange(beg_epochs, epochs + 1):
+
+        
+        pass
     
 
