@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.nn.init as init
+
 
 def add_noise(pc, scale=0.01):
     """
@@ -77,6 +79,9 @@ def parallel_cuda(batchs):
     labels = torch.cat(labels).to(device)
     bs = labels.shape[0] 
     return labels, bs
+
+def tensorinfo(t):
+    return "%f, %f, %f" % (t.max().item(), t.median().item(), t.min().item())
 
 # def init_weights(model):
 #     import torch.nn.init as init

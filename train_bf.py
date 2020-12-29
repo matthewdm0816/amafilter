@@ -119,8 +119,36 @@ if __name__ == "__main__":
     for path in (data_path, model_path):
         check_dir(path, color=colorama.Fore.CYAN)
 
-    # model creation and initialization
-    model = None
-    # TODO: ...
+    # dataset and dataloader
+    train_dataset = ModelNet(root=data_path, name='40', train=True,
+                            # pre_transform=tg.transforms.SamplePoints(samplePoints),
+                            # transform=tg.transforms.KNNGraph(k=10))
+                            pre_transform=transform(samplePoints=samplePoints, k=20))
+    test_dataset = ModelNet(root=data_path, name='40', train=False,
+                            # pre_transform=tg.transforms.SamplePoints(samplePoints),
+                            # transform=tg.transforms.KNNGraph(k=10))
+                            pre_transform=transform(samplePoints=samplePoints, k=20))
+
+    if parallel: 
+        loader = DataListLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
+        test_loader = DataListLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
+    else:
+        loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
+
+    # model, optimizer, scheduler
+    model = AmaFilter(6, 6)
+    optimizer = optim.Adam([{'params': model.parameters(), 'initial_lr': 0.002}],
+                                lr=0.002, weight_decay=5e-4, betas=(0.9, 0.999))
+    # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.65, last_epoch=beg_epochs)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200, last_epoch=beg_epochs)
+    
+    # load model or init model
+    if model_milestone is not None:
+        load_model(model_milestone, optim_milestone, beg_epochs)
+    else:
+        init_weights(model)
+
+    
     
 
