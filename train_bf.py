@@ -26,6 +26,7 @@ ngpu = len(gpu_ids)
 parallel = (ngpu > 1) 
 assert gpu_id in gpu_ids
 
+device = torch.device("cuda:%d" % gpu_id if torch.cuda.is_available() else "cpu")
 
 model_milestone, optim_milestone, beg_epochs = \
     '/data/pkurei/PointNet/model/modelnet40-dense-gcn-3%%25noise-smooth-label-weighted-instance-rot-10deg-10%%25rescale-ensemble20/2020-12-11-15-20-26-4-346-0/model-latest.save', \
@@ -90,7 +91,7 @@ def evaluate(model, loader, epoch: int):
     total_mse /= len(loader)
     total_psnr /= len(loader)
     orig_psnr /= len(loader)
-    print(colorama.Fore.MAGENTA + "[%d]MSE: %.3f, PSNR: %.3f, PSNR0: %.3f" % (epoch, total_mse, total_psnr, orig_psnr))
+    print(colorama.Fore.MAGENTA + "[%d]MSE: %.3f, PSNR: %.3f, PSNR-ORIG: %.3f" % (epoch, total_mse, total_psnr, orig_psnr))
     return total_mse, total_psnr, orig_psnr
 
 if __name__ == "__main__":

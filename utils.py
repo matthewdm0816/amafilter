@@ -3,6 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 
+def check_dir(path, color=None):
+    """
+    check directory if avaliable
+    """
+    import os, colorama
+    if not os.path.exists(path):
+        print("" if color is None else color + "Creating path %s" % path)
+        os.mkdir(path)
 
 def add_noise(pc, scale=0.01):
     """
