@@ -20,7 +20,7 @@ import numpy as np
 import random, math, colorama
 from tqdm import *
 from scaffold import Scaffold
-from utils import init_weights, layers, module_wrapper, tensorinfo
+from utils import *
 
 scaf = Scaffold()
 scaf.debug()
@@ -180,6 +180,9 @@ class BilateralFilter(MessagePassing):
         n_nodes = x.size(0)
 
         # Compute edge weight
+        # print(edge_index, edge_index.shape)
+        # print(x.shape)
+        # print(edge_index.max(), edge_index.min())
         row, col = edge_index
         x_i, x_j = x[row], x[col]
         # sprint(x_i, x_j)
@@ -214,10 +217,11 @@ class AmaFilter(nn.Module):
             BilateralFilter(128, fout)
         ])
 
-    def forward(self, x, batch=None, k=20):
+    def forward(self, x, batch=None, k=16):
         for filter in self.filters:
             # dynamic graph?
             edge_index = knn_graph(x, k=k, batch=batch, loop=False)
+            # print(edge_index, edge_index.shape)
             x = filter(x, edge_index)
         return x
 

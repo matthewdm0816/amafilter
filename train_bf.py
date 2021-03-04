@@ -27,9 +27,9 @@ batch_size = 32
 epochs = 1001
 milestone_period = 10
 
-gpu_id = 7
+gpu_id = 0
 # gpu_ids = [0, 1, 2, 7]
-gpu_ids = [7]
+gpu_ids = [0]
 ngpu = len(gpu_ids)
 # os.environ['CUDA_VISIBLE_DEVICES'] = repr(gpu_ids)[1:-1]
 parallel = (ngpu > 1) 
@@ -53,16 +53,20 @@ def train(model, optimizer, scheduler, loader, epoch: int):
     for i, batch in enumerate(loader, 0):
         if parallel:
             reals, bs = parallel_cuda(batch)
+            # TODO: parallel add noise
         else:
+            print(batch)
             batch = batch.to(device)
-            reals, bs = batch.y, batch.y.shape[0]
+            reals = batch.pos
+            jittered = add_noise(reals.detach())
         
+        orig_psnr = psnr(jittered, reals)
         model.zero_grad()
-        out = model(batch)
+        out = model(jittered, batch=batch.batch, k=32)
 
         loss = mse(out, reals)
-        psnr = mse_to_psnr(loss)
-        total_psnr += psnr.detach().item()
+        psnr_loss = mse_to_psnr(loss)
+        total_psnr += psnr_loss.detach().item()
         total_mse += loss.detach().item()
         
         loss.backward()
@@ -84,17 +88,18 @@ def evaluate(model, loader, epoch: int):
         for i, batch in enumerate(loader, 0):
             if parallel:
                 reals, bs = parallel_cuda(batch)
+                # TODO: parallel add noise
             else:
                 batch = batch.to(device)
-                reals, bs = batch.y, batch.y.shape[0]
+                reals = batch.pos
+                jittered = add_noise(reals.detach())
             
-            orig_psnr = psnr(batch, reals)
-            model.zero_grad()
-            out = model(batch)
+            orig_psnr = psnr(jittered, reals)
+            out = model(jittered, batch=batch.batch, k=32)
 
             loss = mse(out, reals)
-            psnr = mse_to_psnr(loss)
-            total_psnr += psnr.detach().item()
+            psnr_loss = mse_to_psnr(loss)
+            total_psnr += psnr_loss.detach().item()
             total_mse += loss.detach().item()
 
     total_mse /= len(loader)
@@ -105,9 +110,10 @@ def evaluate(model, loader, epoch: int):
 
 if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
-    print(colorama.Fore.MAGENTA + 
-        "Running in Single-GPU mode" if parallel else 
+    print(colorama.Fore.MAGENTA + (
+        "Running in Single-GPU mode" if not parallel else 
         "Running in Multiple-GPU mode")
+    )
 
     # training identifier
     try:
@@ -129,7 +135,7 @@ if __name__ == "__main__":
     model_name = 'modelnet40-bf'
     model_path = os.path.join('model', model_name, str(timestamp))
     pl_path = 'modelnet40-1024'
-    data_path = os.path.join('/data/', pl_path)
+    data_path = os.path.join('/data', 'pkurei', pl_path)
 
     for path in (data_path, model_path):
         check_dir(path, color=colorama.Fore.CYAN)
@@ -151,7 +157,7 @@ if __name__ == "__main__":
     writer = SummaryWriter(comment=model_name)  # global steps => index of epoch
 
     # model, optimizer, scheduler declaration
-    model = AmaFilter(3, 3)
+    model = AmaFilter(3, 3).to(device)
     optimizer = optim.Adam([{'params': model.parameters(), 'initial_lr': 0.002}],
                                 lr=0.002, weight_decay=5e-4, betas=(0.9, 0.999))
     # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.65, last_epoch=beg_epochs)
@@ -167,7 +173,7 @@ if __name__ == "__main__":
     print(colorama.Fore.MAGENTA + "Begin training with: batch size %d, %d batches in total" % (batch_size, batch_cnt))
 
     for epoch in trange(beg_epochs, epochs + 1):
-        mse, psnr = train(model, optimizer, scheduler, train_loader, epoch)
+        train_mse, train_psnr = train(model, optimizer, scheduler, train_loader, epoch)
         eval_mse, eval_psnr, orig_psnr = evaluate(model, test_loader, epoch)
         
         # save model for each <milestone_period> epochs (e.g. 10 rounds)
@@ -179,8 +185,8 @@ if __name__ == "__main__":
         
         # log to tensorboard
         record_dict = {
-            'train_mse': mse,
-            'train_psnr': psnr,
+            'train_mse': train_mse,
+            'train_psnr': train_psnr,
             'test_mse': eval_mse,
             'test_psnr': eval_psnr,
         }
