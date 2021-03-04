@@ -1,3 +1,11 @@
+"""
+Bilateral Filter Training
+TODO: 
+    1. Test on modelnet40
+    2. Implement on MPEG large dataset
+    3. Implement parallel training
+"""
+
 from tensorboardX import SummaryWriter
 import time, random, os, sys, gc, copy, colorama, json
 colorama.init(autoreset=True)
@@ -95,6 +103,8 @@ def evaluate(model, loader, epoch: int):
     return total_mse, total_psnr, orig_psnr
 
 if __name__ == "__main__":
+    torch.cudnn.benchmark = True
+
     # training identifier
     try:
         with open('timestamp.json', 'r') as f:
@@ -131,17 +141,17 @@ if __name__ == "__main__":
                             pre_transform=transform(samplePoints=samplePoints, k=20))
 
     if parallel: 
-        loader = DataListLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
+        train_loader = DataListLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
         test_loader = DataListLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
     else:
-        loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
 
     # tensorboard writer
     writer = SummaryWriter(comment=model_name)  # global steps => index of epoch
 
     # model, optimizer, scheduler declaration
-    model = AmaFilter(6, 6)
+    model = AmaFilter(3, 3)
     optimizer = optim.Adam([{'params': model.parameters(), 'initial_lr': 0.002}],
                                 lr=0.002, weight_decay=5e-4, betas=(0.9, 0.999))
     # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.65, last_epoch=beg_epochs)
@@ -157,8 +167,29 @@ if __name__ == "__main__":
     print(colorama.Fore.MAGENTA + "Begin training with: batch size %d, %d batches in total" % (batch_size, batch_cnt))
 
     for e in trange(beg_epochs, epochs + 1):
-
+        mse, psnr = train(model, optimizer, scheduler, train_loader, epoch)
+        eval_mse, eval_psnr, orig_psnr = evaluate(model, test_loader, epoch)
         
-        pass
+        # save model for each <milestone_period> epochs (e.g. 10 rounds)
+        if e % milestone_period == 0 and e != 0:
+            torch.save(model.state_dict(), os.path.join(model_path, 'model-%d.save' % (e)))
+            torch.save(optimizer.state_dict(), os.path.join(model_path, 'opt-%d.save' % (e)))
+            torch.save(model.state_dict(), os.path.join(model_path, 'model-latest.save'))
+            torch.save(optimizer.state_dict(), os.path.join(model_path, 'opt-latest.save'))
+        
+        # log to tensorboard
+        record_dict = {
+            'train_mse': mse,
+            'train_psnr': psnr,
+            'test_mse': eval_mse,
+            'test_psnr': eval_psnr,
+        }
+
+        for key in record_dict:
+            if not isinstance(record_dict[key], dict):
+                writer.add_scalar(key, record_dict[key], e)
+            else: 
+                writer.add_scalars(key, record_dict[key], e) 
+                # add multiple records
     
 

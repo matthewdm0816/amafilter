@@ -49,11 +49,11 @@ def load_model(f: str, optim:str, e: int):
     global beg_epochs, model
     model.load_state_dict(torch.load(f))
     beg_epochs = e
-    print("Loading milestone with epoch %d at %s" % (beg_epochs, f))
+    print("Loaded milestone with epoch %d at %s" % (beg_epochs, f))
     if optim is not None:
         optimizer.load_state_dict(torch.load(optim))
-        print("Loading milestone optimizer with epoch %d at %s" % (beg_epochs, optim))
-    evaluate(model, msg="Loaded Model:Accuracy: [%.2f %%, %.2f %%] on [Train/Test] Dataset")
+        print("Loaded milestone optimizer with epoch %d at %s" % (beg_epochs, optim))
+    evaluate(model)
 
 class layers():
     def __init__(self, ns):

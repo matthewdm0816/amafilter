@@ -1,3 +1,10 @@
+"""
+Bilateral Filter Models Definition
+TODO: 
+    1. Try multiple W_ij type
+    2. Try different layer stucture
+"""
+
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
@@ -199,12 +206,12 @@ class AmaFilter(nn.Module):
         - Hidden layer adjust
         - Bottleneck?
     """
-    def __init__(self, fin, fout):
+    def __init__(self, fin=6, fout=6):
         super().__init__()
         self.filters = nn.ModuleList([
-            BilateralFilter(6, 64),
+            BilateralFilter(fin, 64),
             BilateralFilter(64, 128),
-            BilateralFilter(128, 6)
+            BilateralFilter(128, fout)
         ])
 
     def forward(self, x, batch=None, k=20):
