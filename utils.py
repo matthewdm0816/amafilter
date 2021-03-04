@@ -2,6 +2,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
+import torch_geometric as tg
+
+def transform(samplePoints=2500, k=32):
+    def f(data):
+        data = tg.transforms.NormalizeScale()(data) # normalize to [-1, 1]
+        data = tg.transforms.SamplePoints(samplePoints)(data)
+        # data = tg.transforms.KNNGraph(k=k)(data)
+        return data
+    return f
 
 def check_dir(path, color=None):
     """
@@ -10,7 +19,7 @@ def check_dir(path, color=None):
     import os, colorama
     if not os.path.exists(path):
         print("" if color is None else color + "Creating path %s" % path)
-        os.mkdir(path)
+        os.makedirs(path, exist_ok=True)
 
 def add_noise(pc, scale=0.01):
     """

@@ -13,16 +13,17 @@ from tqdm import *
 import numpy as np
 
 from torch_geometric.nn import DataParallel
-from torch_geometric.data import DataListLoader
+from torch_geometric.data import DataListLoader, DataLoader
+from torch_geometric.datasets import ModelNet
 import torch
 import torch.optim as optim
 
-from bf import BilateralFilter
+from bf import AmaFilter
 from utils import *
 
 dataset_type = '40'
 samplePoints = 1024
-# batch_size = 32  # largest affordable on GTX1080 with 8G VRAM quq, even with sparse
+batch_size = 32  
 epochs = 1001
 milestone_period = 10
 
@@ -103,7 +104,10 @@ def evaluate(model, loader, epoch: int):
     return total_mse, total_psnr, orig_psnr
 
 if __name__ == "__main__":
-    torch.cudnn.benchmark = True
+    torch.backends.cudnn.benchmark = True
+    print(colorama.Fore.MAGENTA + 
+        "Running in Single-GPU mode" if parallel else 
+        "Running in Multiple-GPU mode")
 
     # training identifier
     try:
@@ -123,21 +127,17 @@ if __name__ == "__main__":
 
     # model and data path
     model_name = 'modelnet40-bf'
-    model_path = os.path.join('model', model_name, timestamp)
-    pl_path = 'modelnet40-knn'
-    data_path = os.path.join('/data1/', pl_path)
+    model_path = os.path.join('model', model_name, str(timestamp))
+    pl_path = 'modelnet40-1024'
+    data_path = os.path.join('/data/', pl_path)
 
     for path in (data_path, model_path):
         check_dir(path, color=colorama.Fore.CYAN)
 
     # dataset and dataloader
     train_dataset = ModelNet(root=data_path, name='40', train=True,
-                            # pre_transform=tg.transforms.SamplePoints(samplePoints),
-                            # transform=tg.transforms.KNNGraph(k=10))
                             pre_transform=transform(samplePoints=samplePoints, k=20))
     test_dataset = ModelNet(root=data_path, name='40', train=False,
-                            # pre_transform=tg.transforms.SamplePoints(samplePoints),
-                            # transform=tg.transforms.KNNGraph(k=10))
                             pre_transform=transform(samplePoints=samplePoints, k=20))
 
     if parallel: 
@@ -163,15 +163,15 @@ if __name__ == "__main__":
     else:
         init_weights(model)
 
-    batch_cnt = len(loader)
+    batch_cnt = len(train_loader)
     print(colorama.Fore.MAGENTA + "Begin training with: batch size %d, %d batches in total" % (batch_size, batch_cnt))
 
-    for e in trange(beg_epochs, epochs + 1):
+    for epoch in trange(beg_epochs, epochs + 1):
         mse, psnr = train(model, optimizer, scheduler, train_loader, epoch)
         eval_mse, eval_psnr, orig_psnr = evaluate(model, test_loader, epoch)
         
         # save model for each <milestone_period> epochs (e.g. 10 rounds)
-        if e % milestone_period == 0 and e != 0:
+        if epoch % milestone_period == 0 and epoch != 0:
             torch.save(model.state_dict(), os.path.join(model_path, 'model-%d.save' % (e)))
             torch.save(optimizer.state_dict(), os.path.join(model_path, 'opt-%d.save' % (e)))
             torch.save(model.state_dict(), os.path.join(model_path, 'model-latest.save'))
@@ -187,9 +187,9 @@ if __name__ == "__main__":
 
         for key in record_dict:
             if not isinstance(record_dict[key], dict):
-                writer.add_scalar(key, record_dict[key], e)
+                writer.add_scalar(key, record_dict[key], epoch)
             else: 
-                writer.add_scalars(key, record_dict[key], e) 
+                writer.add_scalars(key, record_dict[key], epoch) 
                 # add multiple records
     
 
