@@ -23,7 +23,7 @@ from utils import *
 
 dataset_type = '40'
 samplePoints = 1024
-batch_size = 32  
+batch_size = 12 
 epochs = 1001
 milestone_period = 10
 
@@ -51,14 +51,15 @@ def train(model, optimizer, scheduler, loader, epoch: int):
     model.train()
     total_psnr, total_mse = 0, 0
     for i, batch in enumerate(loader, 0):
+        torch.cuda.empty_cache()
         if parallel:
             reals, bs = parallel_cuda(batch)
             # TODO: parallel add noise
         else:
-            print(batch)
+            # print(batch)
             batch = batch.to(device)
             reals = batch.pos
-            jittered = add_noise(reals.detach())
+            jittered = add_noise(reals.detach(), scale=0.1)
         
         orig_psnr = psnr(jittered, reals)
         model.zero_grad()
@@ -71,8 +72,15 @@ def train(model, optimizer, scheduler, loader, epoch: int):
         
         loss.backward()
         optimizer.step()
+        # del jittered, reals
         if i % 10 == 0:
-            print("[%d/%d]MSE: %.3f, PSNR: %.3f" % (epoch, i, loss.item(), psnr.item()))
+            print(colorama.Fore.MAGENTA + "[%d/%d]MSE: %.3f, PSNR: %.3f, PSNR-ORIG: %.3f" % 
+                (epoch, i, 
+                loss.detach().item(), 
+                psnr_loss.detach().item(), 
+                orig_psnr.detach().item()
+                )
+            )
     scheduler.step()
     total_mse /= len(loader)
     total_psnr /= len(loader)
@@ -86,6 +94,7 @@ def evaluate(model, loader, epoch: int):
     total_psnr, total_mse, orig_psnr = 0, 0, 0
     with torch.no_grad():
         for i, batch in enumerate(loader, 0):
+            torch.cuda.empty_cache()
             if parallel:
                 reals, bs = parallel_cuda(batch)
                 # TODO: parallel add noise
@@ -109,7 +118,7 @@ def evaluate(model, loader, epoch: int):
     return total_mse, total_psnr, orig_psnr
 
 if __name__ == "__main__":
-    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.benchmark = False
     print(colorama.Fore.MAGENTA + (
         "Running in Single-GPU mode" if not parallel else 
         "Running in Multiple-GPU mode")
@@ -142,9 +151,9 @@ if __name__ == "__main__":
 
     # dataset and dataloader
     train_dataset = ModelNet(root=data_path, name='40', train=True,
-                            pre_transform=transform(samplePoints=samplePoints, k=20))
+                            pre_transform=transform(samplePoints=samplePoints))
     test_dataset = ModelNet(root=data_path, name='40', train=False,
-                            pre_transform=transform(samplePoints=samplePoints, k=20))
+                            pre_transform=transform(samplePoints=samplePoints))
 
     if parallel: 
         train_loader = DataListLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)

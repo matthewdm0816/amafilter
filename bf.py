@@ -144,7 +144,7 @@ class BilateralFilter(MessagePassing):
         super().__init__(aggr='add')
         self.fproj = nn.Linear(fin, fout)
         # self.weight = Weight(fin, embedding='linear', collate='gaussian')
-        self.weight = Weight(fout, embedding='MLP', collate='gaussian', hidden_layers=[128, 128, fout])
+        self.weight = Weight(fout, embedding='MLP', collate='gaussian', hidden_layers=[128, fout])
 
     def _weighted_degree(self, edge_index, edge_weight, num_nodes):
         """
@@ -168,7 +168,7 @@ class BilateralFilter(MessagePassing):
     def message(self, x_i, x_j, norm):
         y = norm.view(-1, 1) * x_j
         # selective. clamp
-        return torch.clamp(y, -1e3, 1e3)
+        return torch.clamp(y, -1, 1)
 
     def forward(self, x, edge_index):
         """
@@ -188,14 +188,14 @@ class BilateralFilter(MessagePassing):
         # sprint(x_i, x_j)
         edge_weight = self._edge_weight(x_i, x_j)
         # FIXME: Why so small? far distance in initial embeddings
-        sprint(tensorinfo(edge_weight))
+        # sprint(tensorinfo(edge_weight))
 
         # Compute normalization W = D^{-1}W ~ RW
         # TODO: Variable Norm, Sym/None
         deg = self._weighted_degree(col, edge_weight, n_nodes)
         norm = deg.pow(-1.)
         norm = norm[row] # norm[i] = norm[row[i] ~ indexof(x_i)]
-        sprint(tensorinfo(norm))
+        # sprint(tensorinfo(norm))
         # => E * 1
         
         return self.propagate(edge_index, x=x, norm=norm)
