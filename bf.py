@@ -211,9 +211,14 @@ class AmaFilter(nn.Module):
     """
     def __init__(self, fin=6, fout=6):
         super().__init__()
+        # self.filters = nn.ModuleList([
+        #     BilateralFilter(fin, 64),
+        #     BilateralFilter(64, 128),
+        #     BilateralFilter(128, fout)
+        # ])
         self.filters = nn.ModuleList([
-            BilateralFilter(fin, 64),
-            BilateralFilter(64, 128),
+            BilateralFilter(fin, 128),
+            # BilateralFilter(64, 128),
             BilateralFilter(128, fout)
         ])
 

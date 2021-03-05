@@ -25,7 +25,7 @@ dataset_type = '40'
 samplePoints = 1024
 batch_size = 12 
 epochs = 1001
-milestone_period = 10
+milestone_period = 5
 
 gpu_id = 0
 # gpu_ids = [0, 1, 2, 7]
@@ -51,7 +51,7 @@ def train(model, optimizer, scheduler, loader, epoch: int):
     model.train()
     total_psnr, total_mse = 0, 0
     for i, batch in enumerate(loader, 0):
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
         if parallel:
             reals, bs = parallel_cuda(batch)
             # TODO: parallel add noise
@@ -59,9 +59,10 @@ def train(model, optimizer, scheduler, loader, epoch: int):
             # print(batch)
             batch = batch.to(device)
             reals = batch.pos
-            jittered = add_noise(reals.detach(), scale=0.1)
+            jittered = add_noise(reals.detach(), scale=0.02)
         
-        orig_psnr = psnr(jittered, reals)
+        orig_mse = mse(jittered, reals)
+        orig_psnr = mse_to_psnr(orig_mse)
         model.zero_grad()
         out = model(jittered, batch=batch.batch, k=32)
 
@@ -74,9 +75,10 @@ def train(model, optimizer, scheduler, loader, epoch: int):
         optimizer.step()
         # del jittered, reals
         if i % 10 == 0:
-            print(colorama.Fore.MAGENTA + "[%d/%d]MSE: %.3f, PSNR: %.3f, PSNR-ORIG: %.3f" % 
+            print(colorama.Fore.MAGENTA + "[%d/%d]MSE: %.3f, MSE-ORIG: %.3f, PSNR: %.3f, PSNR-ORIG: %.3f" % 
                 (epoch, i, 
                 loss.detach().item(), 
+                orig_mse.detach().item(),
                 psnr_loss.detach().item(), 
                 orig_psnr.detach().item()
                 )
@@ -90,20 +92,21 @@ def evaluate(model, loader, epoch: int):
     """
     NOTE: Need DROP_LAST=TRUE, in case batch length is not uniform
     """
-    model.evaluate()
+    model.eval()
     total_psnr, total_mse, orig_psnr = 0, 0, 0
     with torch.no_grad():
         for i, batch in enumerate(loader, 0):
-            torch.cuda.empty_cache()
+            # torch.cuda.empty_cache()
             if parallel:
                 reals, bs = parallel_cuda(batch)
                 # TODO: parallel add noise
             else:
                 batch = batch.to(device)
                 reals = batch.pos
-                jittered = add_noise(reals.detach())
+                jittered = add_noise(reals.detach(), scale=0.02)
             
-            orig_psnr = psnr(jittered, reals)
+            orig_mse = mse(jittered, reals)
+            orig_psnr = mse_to_psnr(orig_mse)
             out = model(jittered, batch=batch.batch, k=32)
 
             loss = mse(out, reals)
@@ -118,7 +121,7 @@ def evaluate(model, loader, epoch: int):
     return total_mse, total_psnr, orig_psnr
 
 if __name__ == "__main__":
-    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.benchmark = True
     print(colorama.Fore.MAGENTA + (
         "Running in Single-GPU mode" if not parallel else 
         "Running in Multiple-GPU mode")
