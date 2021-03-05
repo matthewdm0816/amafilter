@@ -23,7 +23,7 @@ from utils import *
 
 dataset_type = '40'
 samplePoints = 1024
-batch_size = 12 
+batch_size = 20
 epochs = 1001
 milestone_period = 5
 
