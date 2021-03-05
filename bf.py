@@ -230,7 +230,7 @@ class AmaFilter(nn.Module):
             # dynamic graph?
             edge_index = knn_graph(x, k=k, batch=batch, loop=False)
             # print(edge_index, edge_index.shape)
-            # NOTE: denselinks
+            # NOTE: denselinks added
             y = filter(x, edge_index)
             x = torch.cat((x, y), dim=-1) if i != self.nfilters - 1 else y
         return x

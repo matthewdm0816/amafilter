@@ -5,6 +5,7 @@ TODO:
     2. Implement on MPEG large dataset
     3. Implement parallel training
     4. Learn displacement vector rather than filtered position
+    5. Calculate Std. Dev. => Impl. 10-30 std. jitter
 """
 
 from tensorboardX import SummaryWriter
