@@ -165,8 +165,8 @@ class BilateralFilter(MessagePassing):
         # TODO: explicitly show embeddings of xs
         return self.weight(x_i, x_j)
 
-    def message(self, x_i, x_j, norm):
-        y = norm.view(-1, 1) * x_j
+    def message(self, x_i, x_j, norm, edge_weight):
+        y = norm.view(-1, 1) * edge_weight * x_j
         # selective. clamp
         return torch.clamp(y, -1, 1)
 
@@ -186,6 +186,7 @@ class BilateralFilter(MessagePassing):
         row, col = edge_index
         x_i, x_j = x[row], x[col]
         # sprint(x_i, x_j)
+        # edge_weight: E * FOUT
         edge_weight = self._edge_weight(x_i, x_j)
         # FIXME: Why so small? far distance in initial embeddings
         # sprint(tensorinfo(edge_weight))
@@ -198,7 +199,7 @@ class BilateralFilter(MessagePassing):
         # sprint(tensorinfo(norm))
         # => E * 1
         
-        return self.propagate(edge_index, x=x, norm=norm)
+        return self.propagate(edge_index, x=x, norm=norm, edge_weight=edge_weight)
 
 
 class AmaFilter(nn.Module):
