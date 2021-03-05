@@ -25,10 +25,16 @@ def add_noise(pc, scale=0.01):
     """
     add gaussian noise
     """
-    std = torch.std(pc)
-
     noise = torch.randn(pc.shape).to(pc) * scale
     return pc + noise
+
+def add_multiplier_noise(pc, multiplier=10):
+    """
+    add gaussian noise according to standard deviation
+    """
+    std = torch.std(pc)
+    # print(std)
+    return pc + torch.randn(pc.shape).to(pc) * std * multiplier
 
 def color_jitter(pos, color, scale=0.01):
     """

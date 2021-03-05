@@ -93,7 +93,7 @@ def evaluate(model, loader, epoch: int):
             else:
                 batch = batch.to(device)
                 reals = batch.pos
-                jittered = add_noise(reals.detach(), scale=0.02)
+                jittered = add_multiplier_noise(reals.detach(), multiplier=5)
             
             orig_mse = mse(jittered, reals)
             orig_psnr = mse_to_psnr(orig_mse)

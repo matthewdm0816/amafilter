@@ -56,7 +56,7 @@ def train(model, optimizer, scheduler, loader, epoch: int):
             # print(batch)
             batch = batch.to(device)
             reals = batch.pos
-            jittered = add_noise(reals.detach(), scale=0.02)
+            jittered = add_multiplier_noise(reals.detach(), multiplier=5)
         
         orig_mse = mse(jittered, reals)
         orig_psnr = mse_to_psnr(orig_mse)
@@ -100,7 +100,7 @@ def evaluate(model, loader, epoch: int):
             else:
                 batch = batch.to(device)
                 reals = batch.pos
-                jittered = add_noise(reals.detach(), scale=0.02)
+                jittered = add_multiplier_noise(reals.detach(), multiplier=5)
             
             orig_mse = mse(jittered, reals)
             orig_psnr = mse_to_psnr(orig_mse)
@@ -166,19 +166,19 @@ if __name__ == "__main__":
     # tensorboard writer
     writer = SummaryWriter(comment=model_name)  # global steps => index of epoch
 
+    # load model or init model
+    model_milestone, optim_milestone, beg_epochs = \
+        os.path.join('model', model_name, str(4), 'model-latest.save'), \
+        os.path.join('model', model_name, str(4), 'opt-latest.save'), \
+        30
+    model_milestone, optim_milestone, beg_epochs = None, None, 0 # comment this if need to load from milestone
+
     # model, optimizer, scheduler declaration
     model = AmaFilter(3, 3).to(device)
     optimizer = optim.Adam([{'params': model.parameters(), 'initial_lr': 0.002}],
                                 lr=0.002, weight_decay=5e-4, betas=(0.9, 0.999))
     # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.65, last_epoch=beg_epochs)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200, last_epoch=beg_epochs)
-    
-    # load model or init model
-    model_milestone, optim_milestone, beg_epochs = \
-        os.path.join('model', model_name, 4, 'model-latest.save'), \
-        os.path.join('model', model_name, 4, 'opt-latest.save'), \
-        30
-    model_milestone, optim_milestone, beg_epochs = None, None, 0 # comment this if need to load from milestone
     
     if model_milestone is not None:
         load_model(model_milestone, optim_milestone, beg_epochs)

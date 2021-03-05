@@ -168,7 +168,7 @@ class BilateralFilter(MessagePassing):
     def message(self, x_i, x_j, norm, edge_weight):
         y = norm.view(-1, 1) * edge_weight.view(-1, 1) * x_j
         # selective. clamp
-        return torch.clamp(y, -1, 1)
+        return torch.clamp(y, -10, 10)
 
     def forward(self, x, edge_index):
         """
