@@ -25,6 +25,8 @@ def add_noise(pc, scale=0.01):
     """
     add gaussian noise
     """
+    std = torch.std(pc)
+
     noise = torch.randn(pc.shape).to(pc) * scale
     return pc + noise
 

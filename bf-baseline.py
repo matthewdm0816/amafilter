@@ -161,6 +161,7 @@ if __name__ == '__main__':
 
             if total_psnr > max_psnr:
                 best_sigma, best_gamma = sigma, gamma
+                max_psnr = total_psnr
     
     # record in JSON
     record_str = json.dumps(
