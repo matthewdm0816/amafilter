@@ -47,7 +47,7 @@ class NaiveBilateralFilter(MessagePassing):
         self.k = k
 
     def message(self, x_i, x_j, edge_weight, norm):
-        return x_j * edge_weight.view(-1, 1)
+        return x_j * edge_weight.view(-1, 1) * norm.view(-1, 1)
 
     def update(self, aggr_out, x):
         return aggr_out * (1 - self.gamma) + x * self.gamma
@@ -67,13 +67,17 @@ class NaiveBilateralFilter(MessagePassing):
     def forward(self, x, batch):
         edge_index = knn_graph(x, k=self.k, batch=batch, loop=False)
         n_nodes = x.size(0)
+        eps = 1e-8
 
         row, col = edge_index
         x_i, x_j = x[row], x[col]
-        edge_weight = torch.exp(-self.sigma * (torch.norm(x_i-x_j, dim=-1) ** 2))
-
+        dist = torch.sum((x_i - x_j) ** 2., dim=-1)
+        # sprint(tensorinfo(dist))
+        edge_weight = torch.exp(-self.sigma * dist) + eps
+        # sprint(tensorinfo(edge_weight))
         deg = self._weighted_degree(col, edge_weight, n_nodes)
         norm = deg.pow(-1.)
+        # sprint(tensorinfo(norm))
         norm = norm[row] # norm[i] = norm[row[i] ~ indexof(x_i)]
 
         return self.propagate(edge_index, x=x, norm=norm, edge_weight=edge_weight)
@@ -150,8 +154,8 @@ if __name__ == '__main__':
     records = defaultdict(dict)
     max_psnr = -10
     best_sigma, best_gamma = None, None
-    for sigma in (0.01, 0.03, 0.05, 0.1, 0.2, 0.3):
-        for gamma in (0.3, 0.5, 0.75, 0.9, 0.95, 0.99):
+    for sigma in (0.01, 0.03, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2, 5, 10):
+        for gamma in (0, 0.1, 0.3, 0.5, 0.75, 0.9, 0.95, 0.99):
             print(colorama.Fore.MAGENTA + "Testing config - sigma: %.2f, gamma: %.2f" % (sigma, gamma))
             model = NaiveBilateralFilter(fin=3, sigma=1/sigma, gamma=gamma).to(device)
             model.eval()
@@ -163,6 +167,7 @@ if __name__ == '__main__':
                 best_sigma, best_gamma = sigma, gamma
                 max_psnr = total_psnr
     
+    print(colorama.Fore.GREEN + "Max PSNR: %.2f @ sigma: %.2f, gamma: %.2f" % (max_psnr, best_sigma, best_gamma))
     # record in JSON
     record_str = json.dumps(
         {
