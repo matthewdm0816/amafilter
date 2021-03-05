@@ -25,7 +25,7 @@ from utils import *
 
 dataset_type = '40'
 samplePoints = 1024
-batch_size = 20
+batch_size = 48
 epochs = 1001
 milestone_period = 5
 use_sbn = True
@@ -53,24 +53,33 @@ def train(model, optimizer, scheduler, loader, epoch: int):
     for i, batch in enumerate(loader, 0):
         # torch.cuda.empty_cache()
         if parallel:
-            batch, reals, _ = parallel_cuda(batch, device)
+            _, reals, _ = parallel_cuda(batch, device)
             jittered = [
-                add_multiplier_noise(real.detach(), multiplier=5)
+                add_multiplier_noise(real.detach(), multiplier=5).to(real)
                 for real in reals
             ]
-            # TODO: parallel add noise
+            orig_mse = sum([mse(jitter, real) for jitter, real in zip(jittered, reals)])
+            # NOTE: concat real/jitter image
+            for _, (data, jitter) in enumerate(zip(batch, jittered)):
+                # data.pos = torch.cat([data.pos, jitter], dim=-1)
+                # batch[i] = data
+                data.jittered = jitter
         else:
             # print(batch)
             batch = batch.to(device)
             reals = batch.pos
             jittered = add_multiplier_noise(reals.detach(), multiplier=5)
-        
-        orig_mse = mse(jittered, reals)
+            orig_mse = mse(jittered, reals)
+            batch.jittered = jittered
+            # jittered = torch.cat(reals, jittered, dim=-1)
+
         orig_psnr = mse_to_psnr(orig_mse)
         model.zero_grad()
-        out = model(jittered, batch=batch.batch, k=32)
+        out, loss = model(batch)
+        loss = loss.mean()
+        # print(out.shape, loss.shape)
 
-        loss = mse(out, reals)
+        # loss = mse(out, reals)
         psnr_loss = mse_to_psnr(loss)
         total_psnr += psnr_loss.detach().item()
         total_mse += loss.detach().item()
@@ -102,22 +111,31 @@ def evaluate(model, loader, epoch: int):
         for i, batch in enumerate(loader, 0):
             # torch.cuda.empty_cache()
             if parallel:
-                batch, reals, _ = parallel_cuda(batch, device)
+                _, reals, _ = parallel_cuda(batch, device)
                 jittered = [
-                    add_multiplier_noise(real.detach(), multiplier=5)
+                    add_multiplier_noise(real.detach(), multiplier=5).to(real)
                     for real in reals
                 ]
-                # TODO: parallel add noise
+                orig_mse = sum([mse(jitter, real) for jitter, real in zip(jittered, reals)])
+                # NOTE: concat real/jitter image
+                for _, (data, jitter) in enumerate(zip(batch, jittered)):
+                    # data.pos = torch.cat([data.pos, jitter], dim=-1)
+                    # batch[i] = data
+                    data.jittered = jitter
             else:
+                # print(batch)
                 batch = batch.to(device)
                 reals = batch.pos
                 jittered = add_multiplier_noise(reals.detach(), multiplier=5)
-            
-            orig_mse = mse(jittered, reals)
-            orig_psnr = mse_to_psnr(orig_mse)
-            out = model(jittered, batch=batch.batch, k=32)
+                orig_mse = mse(jittered, reals)
+                batch.jittered = jittered
+                # jittered = torch.cat(reals, jittered, dim=-1)
 
-            loss = mse(out, reals)
+            orig_psnr = mse_to_psnr(orig_mse)
+            out, loss = model(batch)
+            loss = loss.mean()
+
+            # loss = mse(out, reals)
             psnr_loss = mse_to_psnr(loss)
             total_orig_psnr += orig_psnr.detach().item()
             total_psnr += psnr_loss.detach().item()
@@ -133,7 +151,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
     print(colorama.Fore.MAGENTA + (
         "Running in Single-GPU mode" if not parallel else 
-        "Running in Multiple-GPU mode")
+        "Running in Multiple-GPU mode with GPU {}".format(gpu_ids) )
     )
 
     # training identifier
@@ -182,21 +200,22 @@ if __name__ == "__main__":
         os.path.join('model', model_name, str(15), 'model-latest.save'), \
         os.path.join('model', model_name, str(15), 'opt-latest.save'), \
         20
-    # model_milestone, optim_milestone, beg_epochs = None, None, 0 # comment this if need to load from milestone
+    model_milestone, optim_milestone, beg_epochs = None, None, 0 # comment this if need to load from milestone
 
     # model, optimizer, scheduler declaration
-    model = AmaFilter(3, 3).to(device)
+    model = AmaFilter(3, 3, k=32)
     
-    # parallelization
+    # parallelization load
     if parallel:
-        model = DataParallel(model.cuda(), device_ids=gpu_ids, output_device=gpu_id)
         if use_sbn:
             try:
-                from .sync_batchnorm import convert_model
-                model = convert_model(model)
                 # fix sync-batchnorm
+                from sync_batchnorm import convert_model
+                model = convert_model(model)
             except ModuleNotFoundError:
                 raise ModuleNotFoundError("Sync-BN plugin not found")
+            # NOTE: DataParallel call MUST after model definition completes
+        model = DataParallel(model, device_ids=gpu_ids, output_device=gpu_id).to(device)
     else:   
         model = model.to(device)
 
@@ -205,7 +224,6 @@ if __name__ == "__main__":
     # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.65, last_epoch=beg_epochs)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200, last_epoch=beg_epochs)
     
-
     if model_milestone is not None:
         load_model(model, optimizer, model_milestone, optim_milestone, beg_epochs)
     else:
@@ -218,13 +236,20 @@ if __name__ == "__main__":
         train_mse, train_psnr = train(model, optimizer, scheduler, train_loader, epoch)
         eval_mse, eval_psnr, orig_psnr = evaluate(model, test_loader, epoch)
         
+
         # save model for each <milestone_period> epochs (e.g. 10 rounds)
         if epoch % milestone_period == 0 and epoch != 0:
+            # if parallel:
+            #     torch.save(model.module.state_dict(), os.path.join(model_path, 'model-%d.save' % (epoch)))
+            #     torch.save(optimizer.state_dict(), os.path.join(model_path, 'opt-%d.save' % (epoch)))
+            #     torch.save(model.module.state_dict(), os.path.join(model_path, 'model-latest.save'))
+            #     torch.save(optimizer.state_dict(), os.path.join(model_path, 'opt-latest.save'))
+            # else:
             torch.save(model.state_dict(), os.path.join(model_path, 'model-%d.save' % (epoch)))
             torch.save(optimizer.state_dict(), os.path.join(model_path, 'opt-%d.save' % (epoch)))
             torch.save(model.state_dict(), os.path.join(model_path, 'model-latest.save'))
             torch.save(optimizer.state_dict(), os.path.join(model_path, 'opt-latest.save'))
-        
+            
         # log to tensorboard
         record_dict = {
             'train_mse': train_mse,

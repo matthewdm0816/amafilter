@@ -154,6 +154,7 @@ class BilateralFilter(MessagePassing):
         """
         # normalize
         # sprint(edge_index.shape, edge_weight.shape, num_nodes)
+        # print(edge_index.shape, edge_weight.shape)
         out = torch.zeros((num_nodes, )).to(edge_weight)
         return out.scatter_add_(dim=0, index=edge_index, src=edge_weight)
 
@@ -210,8 +211,9 @@ class AmaFilter(nn.Module):
         - Hidden layer adjust
         - Bottleneck?
     """
-    def __init__(self, fin=6, fout=6):
+    def __init__(self, fin=6, fout=6, k=16):
         super().__init__()
+        self.fin, self.fout, self.k = fin, fout, k
         # self.filters = nn.ModuleList([
         #     BilateralFilter(fin, 64),
         #     BilateralFilter(64, 128),
@@ -225,15 +227,23 @@ class AmaFilter(nn.Module):
 
         self.nfilters = len(self.filters)
 
-    def forward(self, x, batch=None, k=16):
+    def forward(self, data):
+        """
+        To Impl. Parallelism, x = input-concat-target
+        """
+        # print(data)
+        target, batch, x = data.pos, data.batch, data.jittered
+        # x, target= x0[:,:self.fin], x0[:,self.fin:]
+        
         for i, filter in enumerate(self.filters):
             # dynamic graph?
-            edge_index = knn_graph(x, k=k, batch=batch, loop=False)
+            edge_index = knn_graph(x, k=self.k, batch=batch, loop=False)
             # print(edge_index, edge_index.shape)
             # NOTE: denselinks added
             y = filter(x, edge_index)
             x = torch.cat((x, y), dim=-1) if i != self.nfilters - 1 else y
-        return x
+        loss = mse(x, target)
+        return x, loss
 
 
 if __name__ == "__main__":

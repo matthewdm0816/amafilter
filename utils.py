@@ -48,8 +48,7 @@ def mse(fake, real):
 
 def psnr(fake, real, max=1.):
     # fake, real: N * FIN
-    mse = F.mse_loss(fake, real, reduction='mean')
-    return mse_to_psnr(mse, max=max)
+    return mse_to_psnr(mse(fake, real), max=max)
 
 def mse_to_psnr(mse, max=1.):
     return 10 * torch.log10(max ** 2 / mse)
@@ -98,11 +97,12 @@ def module_wrapper(f):
 
 def parallel_cuda(batchs, device):
     batchs = [data.to(device) for data in batchs]
+    reals = [data.pos.to(device) for data in batchs]
+    # jittered = [ for real in reals]
     labels = [data.y for data in batchs] # actually batchs
-    # print(len(labels)) # assumably GPU count
     labels = torch.cat(labels).to(device)
     bs = labels.shape[0] 
-    return batchs, labels, bs
+    return batchs, reals, labels
 
 def tensorinfo(t):
     return "%f, %f, %f" % (t.max().item(), t.median().item(), t.min().item())
