@@ -38,11 +38,6 @@ assert gpu_id in gpu_ids
 
 device = torch.device("cuda:%d" % gpu_id if torch.cuda.is_available() else "cpu")
 
-model_milestone, optim_milestone, beg_epochs = \
-    '/data/pkurei/PointNet/model/modelnet40-dense-gcn-3%%25noise-smooth-label-weighted-instance-rot-10deg-10%%25rescale-ensemble20/2020-12-11-15-20-26-4-346-0/model-latest.save', \
-    '/data/pkurei/PointNet/model/modelnet40-dense-gcn-3%%25noise-smooth-label-weighted-instance-rot-10deg-10%%25rescale-ensemble20/2020-12-11-15-20-26-4-346-0/opt-latest.save', \
-    30
-model_milestone, optim_milestone, beg_epochs = None, None, 0 # comment this if need to load from milestone
     
 
 def train(model, optimizer, scheduler, loader, epoch: int):
@@ -156,9 +151,9 @@ if __name__ == "__main__":
 
     # dataset and dataloader
     train_dataset = ModelNet(root=data_path, name='40', train=True,
-                            pre_transform=transform(samplePoints=samplePoints))
+        pre_transform=transform(samplePoints=samplePoints))
     test_dataset = ModelNet(root=data_path, name='40', train=False,
-                            pre_transform=transform(samplePoints=samplePoints))
+        pre_transform=transform(samplePoints=samplePoints))
 
     if parallel: 
         train_loader = DataListLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
@@ -178,6 +173,12 @@ if __name__ == "__main__":
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200, last_epoch=beg_epochs)
     
     # load model or init model
+    model_milestone, optim_milestone, beg_epochs = \
+        os.path.join('model', model_name, 4, 'model-latest.save'), \
+        os.path.join('model', model_name, 4, 'opt-latest.save'), \
+        30
+    model_milestone, optim_milestone, beg_epochs = None, None, 0 # comment this if need to load from milestone
+    
     if model_milestone is not None:
         load_model(model_milestone, optim_milestone, beg_epochs)
     else:

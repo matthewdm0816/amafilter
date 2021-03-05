@@ -198,7 +198,7 @@ class BilateralFilter(MessagePassing):
         norm = norm[row] # norm[i] = norm[row[i] ~ indexof(x_i)]
         # sprint(tensorinfo(norm))
         # => E * 1
-        print(norm.shape, edge_weight.shape)
+        # print(norm.shape, edge_weight.shape)
         return self.propagate(edge_index, x=x, norm=norm, edge_weight=edge_weight)
 
 
