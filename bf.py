@@ -166,7 +166,7 @@ class BilateralFilter(MessagePassing):
         return self.weight(x_i, x_j)
 
     def message(self, x_i, x_j, norm, edge_weight):
-        y = norm.view(-1, 1) * edge_weight * x_j
+        y = norm.view(-1, 1) * edge_weight.view(-1, 1) * x_j
         # selective. clamp
         return torch.clamp(y, -1, 1)
 
@@ -198,7 +198,7 @@ class BilateralFilter(MessagePassing):
         norm = norm[row] # norm[i] = norm[row[i] ~ indexof(x_i)]
         # sprint(tensorinfo(norm))
         # => E * 1
-        
+        print(norm.shape, edge_weight.shape)
         return self.propagate(edge_index, x=x, norm=norm, edge_weight=edge_weight)
 
 
