@@ -219,15 +219,19 @@ class AmaFilter(nn.Module):
         self.filters = nn.ModuleList([
             BilateralFilter(fin, 128),
             # BilateralFilter(64, 128),
-            BilateralFilter(128, fout)
+            BilateralFilter(128 + fin, fout)
         ])
 
+        self.nfilters = len(self.filters)
+
     def forward(self, x, batch=None, k=16):
-        for filter in self.filters:
+        for i, filter in enumerate(self.filters):
             # dynamic graph?
             edge_index = knn_graph(x, k=k, batch=batch, loop=False)
             # print(edge_index, edge_index.shape)
-            x = filter(x, edge_index)
+            # NOTE: denselinks
+            y = filter(x, edge_index)
+            x = torch.cat((x, y), dim=-1) if i != self.nfilters - 1 else y
         return x
 
 

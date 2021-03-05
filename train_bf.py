@@ -4,6 +4,7 @@ TODO:
     1. Test on modelnet40
     2. Implement on MPEG large dataset
     3. Implement parallel training
+    4. Learn displacement vector rather than filtered position
 """
 
 from tensorboardX import SummaryWriter
@@ -93,7 +94,7 @@ def evaluate(model, loader, epoch: int):
     NOTE: Need DROP_LAST=TRUE, in case batch length is not uniform
     """
     model.eval()
-    total_psnr, total_mse, orig_psnr = 0, 0, 0
+    total_psnr, total_mse, total_orig_psnr = 0, 0, 0
     with torch.no_grad():
         for i, batch in enumerate(loader, 0):
             # torch.cuda.empty_cache()
@@ -111,13 +112,14 @@ def evaluate(model, loader, epoch: int):
 
             loss = mse(out, reals)
             psnr_loss = mse_to_psnr(loss)
+            total_orig_psnr += orig_psnr.detach().item()
             total_psnr += psnr_loss.detach().item()
             total_mse += loss.detach().item()
 
     total_mse /= len(loader)
     total_psnr /= len(loader)
-    orig_psnr /= len(loader)
-    print(colorama.Fore.MAGENTA + "[%d]MSE: %.3f, PSNR: %.3f, PSNR-ORIG: %.3f" % (epoch, total_mse, total_psnr, orig_psnr))
+    total_orig_psnr /= len(loader)
+    print(colorama.Fore.MAGENTA + "[%d]MSE: %.3f, PSNR: %.3f, PSNR-ORIG: %.3f" % (epoch, total_mse, total_psnr, total_orig_psnr))
     return total_mse, total_psnr, orig_psnr
 
 if __name__ == "__main__":
@@ -190,8 +192,8 @@ if __name__ == "__main__":
         
         # save model for each <milestone_period> epochs (e.g. 10 rounds)
         if epoch % milestone_period == 0 and epoch != 0:
-            torch.save(model.state_dict(), os.path.join(model_path, 'model-%d.save' % (e)))
-            torch.save(optimizer.state_dict(), os.path.join(model_path, 'opt-%d.save' % (e)))
+            torch.save(model.state_dict(), os.path.join(model_path, 'model-%d.save' % (epoch)))
+            torch.save(optimizer.state_dict(), os.path.join(model_path, 'opt-%d.save' % (epoch)))
             torch.save(model.state_dict(), os.path.join(model_path, 'model-latest.save'))
             torch.save(optimizer.state_dict(), os.path.join(model_path, 'opt-latest.save'))
         
