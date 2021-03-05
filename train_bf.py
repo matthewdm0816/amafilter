@@ -28,10 +28,11 @@ samplePoints = 1024
 batch_size = 20
 epochs = 1001
 milestone_period = 5
+use_sbn = True
 
 gpu_id = 0
 # gpu_ids = [0, 1, 2, 7]
-gpu_ids = [0]
+gpu_ids = [0, 1]
 ngpu = len(gpu_ids)
 # os.environ['CUDA_VISIBLE_DEVICES'] = repr(gpu_ids)[1:-1]
 parallel = (ngpu > 1) 
@@ -39,18 +40,24 @@ assert gpu_id in gpu_ids
 
 device = torch.device("cuda:%d" % gpu_id if torch.cuda.is_available() else "cpu")
 
-    
-
 def train(model, optimizer, scheduler, loader, epoch: int):
     """
     NOTE: Need DROP_LAST=TRUE, in case batch length is not uniform
     """
     model.train()
+
+    # show current lr
+    print(colorama.Fore.GREEN + "Current LR: %.5f" % optimizer.param_groups[0]['lr'])
+    
     total_psnr, total_mse = 0, 0
     for i, batch in enumerate(loader, 0):
         # torch.cuda.empty_cache()
         if parallel:
-            reals, bs = parallel_cuda(batch)
+            batch, reals, _ = parallel_cuda(batch, device)
+            jittered = [
+                add_multiplier_noise(real.detach(), multiplier=5)
+                for real in reals
+            ]
             # TODO: parallel add noise
         else:
             # print(batch)
@@ -95,7 +102,11 @@ def evaluate(model, loader, epoch: int):
         for i, batch in enumerate(loader, 0):
             # torch.cuda.empty_cache()
             if parallel:
-                reals, bs = parallel_cuda(batch)
+                batch, reals, _ = parallel_cuda(batch, device)
+                jittered = [
+                    add_multiplier_noise(real.detach(), multiplier=5)
+                    for real in reals
+                ]
                 # TODO: parallel add noise
             else:
                 batch = batch.to(device)
@@ -168,20 +179,35 @@ if __name__ == "__main__":
 
     # load model or init model
     model_milestone, optim_milestone, beg_epochs = \
-        os.path.join('model', model_name, str(4), 'model-latest.save'), \
-        os.path.join('model', model_name, str(4), 'opt-latest.save'), \
-        30
-    model_milestone, optim_milestone, beg_epochs = None, None, 0 # comment this if need to load from milestone
+        os.path.join('model', model_name, str(15), 'model-latest.save'), \
+        os.path.join('model', model_name, str(15), 'opt-latest.save'), \
+        20
+    # model_milestone, optim_milestone, beg_epochs = None, None, 0 # comment this if need to load from milestone
 
     # model, optimizer, scheduler declaration
     model = AmaFilter(3, 3).to(device)
+    
+    # parallelization
+    if parallel:
+        model = DataParallel(model.cuda(), device_ids=gpu_ids, output_device=gpu_id)
+        if use_sbn:
+            try:
+                from .sync_batchnorm import convert_model
+                model = convert_model(model)
+                # fix sync-batchnorm
+            except ModuleNotFoundError:
+                raise ModuleNotFoundError("Sync-BN plugin not found")
+    else:   
+        model = model.to(device)
+
     optimizer = optim.Adam([{'params': model.parameters(), 'initial_lr': 0.002}],
                                 lr=0.002, weight_decay=5e-4, betas=(0.9, 0.999))
     # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.65, last_epoch=beg_epochs)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200, last_epoch=beg_epochs)
     
+
     if model_milestone is not None:
-        load_model(model_milestone, optim_milestone, beg_epochs)
+        load_model(model, optimizer, model_milestone, optim_milestone, beg_epochs)
     else:
         init_weights(model)
 

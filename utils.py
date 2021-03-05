@@ -62,15 +62,14 @@ def init_weights(model):
             m.weight.data.fill_(1)
             m.bias.data.zero_()
 
-def load_model(f: str, optim:str, e: int):
-    global beg_epochs, model
+def load_model(model, optimizer, f: str, optim: str, e: int, evaluate=None):
     model.load_state_dict(torch.load(f))
-    beg_epochs = e
-    print("Loaded milestone with epoch %d at %s" % (beg_epochs, f))
+    print("Loaded milestone with epoch %d at %s" % (e, f))
     if optim is not None:
         optimizer.load_state_dict(torch.load(optim))
-        print("Loaded milestone optimizer with epoch %d at %s" % (beg_epochs, optim))
-    evaluate(model)
+        print("Loaded milestone optimizer with epoch %d at %s" % (e, optim))
+    if evaluate is not None:
+        evaluate(model)
 
 class layers():
     def __init__(self, ns):
@@ -97,13 +96,13 @@ def module_wrapper(f):
     
     return module()
 
-def parallel_cuda(batchs):
+def parallel_cuda(batchs, device):
     batchs = [data.to(device) for data in batchs]
     labels = [data.y for data in batchs] # actually batchs
     # print(len(labels)) # assumably GPU count
     labels = torch.cat(labels).to(device)
     bs = labels.shape[0] 
-    return labels, bs
+    return batchs, labels, bs
 
 def tensorinfo(t):
     return "%f, %f, %f" % (t.max().item(), t.median().item(), t.min().item())
