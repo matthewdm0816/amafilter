@@ -25,15 +25,14 @@ from utils import *
 
 dataset_type = '40'
 samplePoints = 1024
-batch_size = 48
 epochs = 1001
 milestone_period = 5
 use_sbn = True
-
 gpu_id = 0
 # gpu_ids = [0, 1, 2, 7]
-gpu_ids = [0, 1]
+gpu_ids = [0, 1, 2, 3]
 ngpu = len(gpu_ids)
+batch_size = 16 * ngpu # bs depends on GPUs used
 # os.environ['CUDA_VISIBLE_DEVICES'] = repr(gpu_ids)[1:-1]
 parallel = (ngpu > 1) 
 assert gpu_id in gpu_ids
@@ -171,7 +170,7 @@ if __name__ == "__main__":
             )
 
     # model and data path
-    model_name = 'modelnet40-bf'
+    model_name = 'modelnet40-bf-64-128'
     model_path = os.path.join('model', model_name, str(timestamp))
     pl_path = 'modelnet40-1024'
     data_path = os.path.join('/data', 'pkurei', pl_path)

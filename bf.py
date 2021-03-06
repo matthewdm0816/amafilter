@@ -214,16 +214,16 @@ class AmaFilter(nn.Module):
     def __init__(self, fin=6, fout=6, k=16):
         super().__init__()
         self.fin, self.fout, self.k = fin, fout, k
-        # self.filters = nn.ModuleList([
-        #     BilateralFilter(fin, 64),
-        #     BilateralFilter(64, 128),
-        #     BilateralFilter(128, fout)
-        # ])
         self.filters = nn.ModuleList([
-            BilateralFilter(fin, 128),
-            # BilateralFilter(64, 128),
-            BilateralFilter(128 + fin, fout)
+            BilateralFilter(fin, 64),
+            BilateralFilter(64 + fin, 128),
+            BilateralFilter(64 + fin + 128, fout)
         ])
+        # self.filters = nn.ModuleList([
+        #     BilateralFilter(fin, 128),
+        #     # BilateralFilter(64, 128),
+        #     BilateralFilter(128 + fin, fout)
+        # ])
 
         self.nfilters = len(self.filters)
 
