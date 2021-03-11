@@ -106,34 +106,3 @@ def parallel_cuda(batchs, device):
 
 def tensorinfo(t):
     return "%f, %f, %f" % (t.max().item(), t.median().item(), t.min().item())
-
-# def init_weights(model):
-#     import torch.nn.init as init
-#     for m in model.modules():
-#         if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
-#             init.xavier_uniform_(m.weight.data, gain=nn.init.calculate_gain('relu'))
-#         elif isinstance(m, nn.BatchNorm1d):
-#             m.weight.data.fill_(1)
-#             m.bias.data.zero_()
-
-
-# class GaussianLayer(nn.Module):
-#     def __init__(self):
-#         super().__init__()
-
-#     def forward(self, x):
-#         return F.exp(-x ** 2)
-
-# class ExponentialLayer(nn.Module):
-#     def __init__(self):
-#         super().__init__()
-    
-#     def forward(self, x):
-#         return F.exp(-x)
-
-# class InverseLayer(nn.Module):
-#     def __init__(self):
-#         super().__init__()
-    
-#     def forward(self, x):
-#         return x.pow(-2)

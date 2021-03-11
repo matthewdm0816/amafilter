@@ -5,7 +5,12 @@
 		},
 		{
 			"path": "../PointNet"
+		},
+		{
+			"path": "../../EternalHope/jxrjxrjxr/dequantization-2020"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"python.pythonPath": "/home/pkurei/.conda/envs/rei/bin/python"
+	}
 }
