@@ -92,7 +92,10 @@ if __name__ == '__main__':
     r"""
     Unit Test of dataset/dataloaders
     """
-    dataset = MPEGDataset(root='', training=True, sigma=0.1)
-
+    dataset = MPEGDataset(root='data', training=True, sigma=0.1)
+    train_loader = ADataListLoader(dataset, training=True, test_classes=[0, 1], batch_size=16, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
+    print("%d batches in total!" % (len(train_loader)))
+    for batch in train_loader:
+        print(batch)
 
 
