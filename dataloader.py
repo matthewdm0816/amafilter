@@ -99,8 +99,12 @@ if __name__ == '__main__':
     """
     dataset = MPEGDataset(root='data', training=True, sigma=0.1)
     train_loader = ADataListLoader(dataset, training=True, test_classes=[0, 1], batch_size=16, shuffle=True, drop_last=False, num_workers=8)
+    test_loader = ADataListLoader(dataset, training=False, test_classes=[0, 1], batch_size=16, shuffle=True, drop_last=False, num_workers=8)
     print("%d batches in total!" % (len(train_loader)))
     for batch in train_loader:
+        sprint(batch)
+        break
+    for batch in test_loader:
         sprint(batch)
         break
 
