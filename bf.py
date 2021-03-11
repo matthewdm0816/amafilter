@@ -27,7 +27,6 @@ scaf.debug()
 sprint = scaf.print
 warn = scaf.warn
 
-
 class MLP(nn.Module):
     """
     Plain MLP with activation
