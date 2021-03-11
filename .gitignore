@@ -144,3 +144,5 @@ cython_debug/
 timestamp.json
 model/
 runs/
+data/
+__pycache__/
