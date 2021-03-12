@@ -9,6 +9,7 @@ TODO:
     6. Use specific channels for loss calc. (i.e. color only)
     7. Impl. further benchmark metrics
     8. Try alternative optimizers(esp. SGD)
+    9. Why MSE mismatch?
 """
 
 from tensorboardX import SummaryWriter
@@ -28,7 +29,7 @@ from bf import AmaFilter
 from dataloader import MPEGDataset, ADataListLoader, MPEGTransform
 from utils import *
 
-dataset_type = "40"
+# dataset_type = "40"
 samplePoints = 1024
 epochs = 1001
 milestone_period = 5
@@ -53,6 +54,13 @@ assert dataset_type in ["MPEG", "MN40"]
 
 
 def process_batch(batch, parallel, dataset_type):
+    if parallel:
+        # FIXME: concat again after one epoch
+        # NOTE: must need to make full clone
+        result_batch = [data.clone() for data in batch]
+    else:
+        # make a result_batch for non-parallel runs
+        result_batch = batch.clone()
     if dataset_type == "MN40":
         if parallel:
             batch = parallel_cuda(batch, device)
@@ -67,25 +75,28 @@ def process_batch(batch, parallel, dataset_type):
 
             # NOTE: concat real/jitter image
             for i, (data, jitter) in enumerate(zip(batch, jittered)):
-                batch[i].x, batch[i].y = jitter, data.pos
+                result_batch[i].x, result_batch[i].y = jitter, data.pos
         else:
             batch = batch.to(device)
             reals = batch.pos
             jittered = add_multiplier_noise(reals.detach(), multiplier=5)
             orig_mse = mse(jittered, reals)
-            batch.x, batch.y = jittered, batch.pos
+            # result_batch = batch.clone()
+            result_batch.x, result_batch.y = jittered, batch.pos
     elif dataset_type == "MPEG":
         if parallel:  # only paraller loader impl.ed
             batch = parallel_cuda(batch, device)
             # in MPEG, Data(x, y, pos, label) ~ noised C/orig C/noised C-cat-orig P
             orig_mse = torch.tensor([mse(data.x, data.y) for data in batch]).mean()
             for i, data in enumerate(batch):
-                batch[i].x = torch.cat([data.x, data.z], dim=-1)
-                batch[i].y = torch.cat([data.y, data.z], dim=-1)
+                # NOTE: don't modify batch itself! it'll change the damn dataset!
+                result_batch[i].x = torch.cat([data.x, data.z], dim=-1)
+                result_batch[i].y = torch.cat([data.y, data.z], dim=-1)
         else:
             raise NotImplementedError
 
-    return batch, orig_mse
+    # print(result_batch[0].x.shape, result_batch[0].y.shape)
+    return result_batch, orig_mse
 
 
 def train(model, optimizer, scheduler, loader, epoch: int):
@@ -110,6 +121,7 @@ def train(model, optimizer, scheduler, loader, epoch: int):
         # print(out.shape, loss.shape)
 
         psnr_loss = mse_to_psnr(loss)
+        # total_orig_mse = orig_mse.detach().mean
         total_psnr += psnr_loss.detach().item()
         total_mse += loss.detach().item()
 
@@ -258,7 +270,7 @@ if __name__ == "__main__":
     elif dataset_type == "MPEG":
         dataset = MPEGDataset(
             root=data_path,
-            # pre_transform=MPEGTransform
+            pre_transform=MPEGTransform
         )
         if parallel:
             train_loader = ADataListLoader(

@@ -231,7 +231,7 @@ class AmaFilter(nn.Module):
         # x, target= x0[:,:self.fin], x0[:,self.fin:]
         
         for i, filter in enumerate(self.filters):
-            # dynamic graph?
+            # dynamic graph? yes!
             edge_index = knn_graph(x, k=self.k, batch=batch, loop=False)
             # print(edge_index, edge_index.shape)
             # NOTE: denselinks added

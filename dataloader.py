@@ -1,5 +1,7 @@
 """
 Dataloaders of datasets: MPEG etc.
+TODO:
+    1. Generate various sigma data
 """
 from scaffold import *
 from utils import tensorinfo, mse
@@ -222,7 +224,7 @@ class ADataListLoader(DataListLoader):
         super().__init__(data_list, batch_size, *args, **kwargs)
 
 
-def MPEGTransform(data, func=normalize_scale):
+def MPEGTransform(data, func=whiten):
     r"""
     Transformations for MPEG dataset
     Data(x, y, pos, label) | x, y, pos with shape [N, CHANNEL]
@@ -246,14 +248,13 @@ def showData(data):
         if torch.is_tensor(data[key]):
             sprint(tensorinfo(data[key]))
 
-
 if __name__ == "__main__":
     r"""
     Unit Test of dataset/dataloaders
     """
     dataset = MPEGDataset(
-        root="data",
-        sigma=0.1,
+        root="data-0.2",
+        sigma=0.2,
         num_workers=16,
         pre_transform=MPEGTransform
     )
