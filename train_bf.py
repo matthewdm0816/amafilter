@@ -93,7 +93,9 @@ def process_batch(batch, parallel, dataset_type):
                 result_batch[i].x = torch.cat([data.x, data.z], dim=-1)
                 result_batch[i].y = torch.cat([data.y, data.z], dim=-1)
         else:
-            raise NotImplementedError
+            orig_mse = mse(batch.x, batch.y)
+            result_batch.x = torch.cat([batch.x, batch.y], dim=-1)
+            result_batch.y = torch.cat([batch.y, batch.z], dim=-1)
 
     # print(result_batch[0].x.shape, result_batch[0].y.shape)
     return result_batch, orig_mse
@@ -211,10 +213,10 @@ if __name__ == "__main__":
         pl_path = "modelnet40-1024"
         data_path = os.path.join("/data", "pkurei", pl_path)
     elif dataset_type == "MPEG":
-        model_name = "mpeg-bf"
+        model_name = "mpeg-bf-0.50"
         model_path = os.path.join("model", model_name, str(timestamp))
         # pl_path = 'pku'
-        data_path = os.path.join("data")
+        data_path = os.path.join("data-0.50")
 
     for path in (data_path, model_path):
         check_dir(path, color=colorama.Fore.CYAN)
@@ -342,7 +344,7 @@ if __name__ == "__main__":
         )
     # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.65, last_epoch=beg_epochs)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=200, last_epoch=beg_epochs
+        optimizer, T_max=75, last_epoch=beg_epochs
     )
 
     if model_milestone is not None:

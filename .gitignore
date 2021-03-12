@@ -146,4 +146,5 @@ model/
 runs/
 data/
 data-plain/
+data-*/
 __pycache__/

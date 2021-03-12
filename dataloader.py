@@ -23,6 +23,8 @@ import colorama
 from os.path import join
 from tqdm import *
 from multiprocessing import Process, Queue, Pool, TimeoutError
+from argparse import ArgumentParser
+import shutil
 
 colorama.init(autoreset=True)
 
@@ -47,7 +49,7 @@ def remove_ac(v):
 
 
 def normalize_scale(v):
-    r""" 
+    r"""
     Normalize to [-1, 1] box
     """
     v = remove_ac(v)
@@ -248,40 +250,76 @@ def showData(data):
         if torch.is_tensor(data[key]):
             sprint(tensorinfo(data[key]))
 
+
 if __name__ == "__main__":
-    r"""
-    Unit Test of dataset/dataloaders
-    """
-    dataset = MPEGDataset(
-        root="data-0.2",
-        sigma=0.2,
-        num_workers=16,
-        pre_transform=MPEGTransform
+    # parse args
+    parser = ArgumentParser()
+    parser.add_argument("-u", "--unit-test", help="run unit-test", action="store_true")
+    parser.add_argument(
+        "-g", "--generate", help="generate dataset", action="store_true"
     )
-    train_loader = ADataListLoader(
-        dataset,
-        training=True,
-        test_classes=[0, 1],
-        batch_size=16,
-        shuffle=True,
-        drop_last=False,
-        num_workers=8,
+    parser.add_argument(
+        "-s", "--sigma", help="σ of added gaussian noise", nargs="+", type=float
     )
-    test_loader = ADataListLoader(
-        dataset,
-        training=False,
-        test_classes=[0, 1],
-        batch_size=16,
-        shuffle=True,
-        drop_last=False,
-        num_workers=8,
-    )
-    print("%d batches in total!" % (len(train_loader)))
-    for batch in train_loader:
-        sprint(batch)
-        showData(batch[0])
-        break
-    for batch in test_loader:
-        sprint(batch)
-        showData(batch[0])
-        break
+    args = parser.parse_args()
+    assert args.unit_test != args.generate
+
+    if args.unit_test:
+        r"""
+        Unit Test of dataset/dataloaders
+        """
+        dataset = MPEGDataset(
+            root="data-0.2", sigma=0.2, num_workers=16, pre_transform=MPEGTransform
+        )
+        train_loader = ADataListLoader(
+            dataset,
+            training=True,
+            test_classes=[0, 1],
+            batch_size=16,
+            shuffle=True,
+            drop_last=False,
+            num_workers=8,
+        )
+        test_loader = ADataListLoader(
+            dataset,
+            training=False,
+            test_classes=[0, 1],
+            batch_size=16,
+            shuffle=True,
+            drop_last=False,
+            num_workers=8,
+        )
+        print("%d batches in total!" % (len(train_loader)))
+        for batch in train_loader:
+            sprint(batch)
+            showData(batch[0])
+            break
+        for batch in test_loader:
+            sprint(batch)
+            showData(batch[0])
+            break
+    elif args.generate:
+        """
+        Generate according to given σ
+        """
+        for sigma in args.sigma:
+            # copy source raw
+            orig_dataset_dir = "data/raw"
+            dataset_dir = "data-%.2f" % sigma
+            raw_dir = os.path.join(dataset_dir, "raw")
+            proc_dir = os.path.join(dataset_dir, 'processed')
+            if os.path.exists(raw_dir):
+                print(colorama.Fore.RED + "Removing old raw at %s" % raw_dir)
+                shutil.rmtree(raw_dir)
+            if os.path.exists(proc_dir):
+                print(colorama.Fore.RED + "Removing old processed at %s" % proc_dir)
+                shutil.rmtree(proc_dir)
+            shutil.copytree(orig_dataset_dir, raw_dir)
+            # process dataset
+            print(colorama.Fore.GREEN + "Setting σ=%.2f" % sigma)
+            dataset = MPEGDataset(
+                root=dataset_dir,
+                sigma=sigma,
+                num_workers=16,
+                pre_transform=MPEGTransform,
+            )
