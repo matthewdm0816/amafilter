@@ -33,7 +33,7 @@ samplePoints = 1024
 epochs = 1001
 milestone_period = 5
 use_sbn = True
-gpu_id = 6
+gpu_id = 4
 # gpu_ids = [0, 1, 2, 7]
 gpu_ids = [4, 5, 6, 7]
 ngpu = len(gpu_ids)
@@ -99,7 +99,7 @@ def train(model, optimizer, scheduler, loader, epoch: int):
     print(colorama.Fore.GREEN + "Current LR: %.3E" % optimizer.param_groups[0]["lr"])
 
     total_psnr, total_mse = 0, 0
-    for i, batch in enumerate(loader, 0):
+    for i, batch in tqdm(enumerate(loader, 0), total=len(loader)):
         # torch.cuda.empty_cache()
         batch, orig_mse = process_batch(batch, parallel, dataset_type)
 
@@ -199,10 +199,10 @@ if __name__ == "__main__":
         pl_path = "modelnet40-1024"
         data_path = os.path.join("/data", "pkurei", pl_path)
     elif dataset_type == "MPEG":
-        model_name = "mpeg-bf-plain"
+        model_name = "mpeg-bf"
         model_path = os.path.join("model", model_name, str(timestamp))
         # pl_path = 'pku'
-        data_path = os.path.join("data-plain")
+        data_path = os.path.join("data")
 
     for path in (data_path, model_path):
         check_dir(path, color=colorama.Fore.CYAN)

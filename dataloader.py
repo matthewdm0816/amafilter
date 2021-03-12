@@ -30,6 +30,56 @@ sprint = scaf.print
 warn = scaf.warn
 
 
+def whiten(v):
+    r"""
+    Whiten data to mean 0, std. 1
+    """
+    return (v - v.mean(dim=0)) / v.std(dim=0)
+
+
+def remove_ac(v):
+    r"""
+    Remove AC component from data
+    """
+    return v - v.mean(dim=0)
+
+
+def normalize_scale(v):
+    r""" 
+    Normalize to [-1, 1] box
+    """
+    v = remove_ac(v)
+    scale = (1 / v.abs().max()) * 0.999999
+    return v * scale
+
+
+def pointset_diameter(v, sample_times=100):
+    r"""
+    Calc. diamter of point cloud
+    """
+    n_pts, fin = v.shape
+    eps = 1e-6
+    diameter = -1.0
+    for _ in range(sample_times):
+        index = tgnn.fps(v, ratio=2 / n_pts + eps)
+        distance = (v[index][0] - v[index][1]).norm()
+        diameter = max(distance, diameter)
+
+    return diameter
+
+
+def sphere_noise(v, sigma=0.1, sample_times=100):
+    r"""
+    Generate noise ~ sigma * d(PC), for single point cloud!
+    d(PC) ~ diameter of point cloud
+    """
+    diameter = pointset_diameter(v, sample_times)
+    # print(diameter)
+    noise = torch.randn_like(v) * sigma * diameter
+    noise = noise.to(v)
+    return noise
+
+
 class MPEGDataset(InMemoryDataset):
     """
     Parse MPEG Dataset
@@ -52,7 +102,7 @@ class MPEGDataset(InMemoryDataset):
     def __init__(
         self,
         root,
-        noise_generator,
+        noise_generator=sphere_noise,
         transform=None,
         pre_transform=None,
         sigma=0.1,
@@ -80,6 +130,7 @@ class MPEGDataset(InMemoryDataset):
         noise = noise_generator(data.y, sigma)
         # print(noise.norm())
         data.x = data.x + noise
+        # print(noise.norm())
         return data
 
     def process(self):
@@ -89,6 +140,8 @@ class MPEGDataset(InMemoryDataset):
         data_list = []
 
         # parse .mat PCs
+        if self.num_workers > 1:
+            print(colorama.Fore.GREEN + "Using %d cores..." % self.num_workers)
         for i_name, raw_path in tqdm(
             enumerate(self.raw_paths), total=len(self.raw_paths)
         ):
@@ -98,7 +151,6 @@ class MPEGDataset(InMemoryDataset):
             n_pc, n_point, _ = y.shape  # pc/point amounts
             if self.num_workers > 1:
                 # parallel process
-                print(colorama.Fore.GREEN + "Using %d cores..." % self.num_workers)
                 with Pool(processes=self.num_workers) as pool:
                     result = pool.starmap(
                         self._process_data,
@@ -170,7 +222,7 @@ class ADataListLoader(DataListLoader):
         super().__init__(data_list, batch_size, *args, **kwargs)
 
 
-def MPEGTransform(data):
+def MPEGTransform(data, func=normalize_scale):
     r"""
     Transformations for MPEG dataset
     Data(x, y, pos, label) | x, y, pos with shape [N, CHANNEL]
@@ -181,48 +233,8 @@ def MPEGTransform(data):
         # process all tensors
         if torch.is_tensor(data[key]):
             # print(key)
-            data[key] = whiten(data[key])
+            data[key] = func(data[key])
     return data
-
-
-def whiten(v):
-    r"""
-    Whiten data to mean 0, std. 1
-    """
-    return (v - v.mean(dim=0)) / v.std(dim=0)
-
-
-def remove_ac(v):
-    r"""
-    Remove AC component from data
-    """
-    return v - v.mean(dim=0)
-
-
-def pointset_diameter(v, sample_times=100):
-    r"""
-    Calc. diamter of point cloud
-    """
-    n_pts, fin = v.shape
-    eps = 1e-6
-    diameter = -1.0
-    for _ in range(sample_times):
-        index = tgnn.fps(v, ratio=2 / n_pts + eps)
-        distance = (v[index][0] - v[index][1]).norm()
-        diameter = max(distance, diameter)
-
-    return diameter
-
-
-def sphere_noise(v, sigma=0.1, sample_times=100):
-    r"""
-    Generate noise ~ sigma * d(PC), for single point cloud!
-    d(PC) ~ diameter of point cloud
-    """
-    diameter = pointset_diameter(v, sample_times)
-    noise = torch.randn_like(v) * sigma * diameter
-    noise = noise.to(v)
-    return noise
 
 
 def showData(data):
@@ -240,11 +252,10 @@ if __name__ == "__main__":
     Unit Test of dataset/dataloaders
     """
     dataset = MPEGDataset(
-        root="data-plain",
+        root="data",
         sigma=0.1,
-        noise_generator=sphere_noise,
-        num_workers=16
-        # pre_transform=MPEGTransform
+        num_workers=16,
+        pre_transform=MPEGTransform
     )
     train_loader = ADataListLoader(
         dataset,
