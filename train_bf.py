@@ -35,12 +35,15 @@ milestone_period = 5
 use_sbn = True
 gpu_id = 6
 # gpu_ids = [0, 1, 2, 7]
-gpu_ids = [6, 7]
+gpu_ids = [4, 5, 6, 7]
 ngpu = len(gpu_ids)
 batch_size = 8 * ngpu  # bs depends on GPUs used
 # os.environ['CUDA_VISIBLE_DEVICES'] = repr(gpu_ids)[1:-1]
 parallel = ngpu > 1
 assert gpu_id in gpu_ids
+
+optimizer_type = 'Adam'
+assert optimizer_type in ['Adam', 'SGD']
 
 device = torch.device("cuda:%d" % gpu_id if torch.cuda.is_available() else "cpu")
 
@@ -64,17 +67,13 @@ def process_batch(batch, parallel, dataset_type):
 
             # NOTE: concat real/jitter image
             for i, (data, jitter) in enumerate(zip(batch, jittered)):
-                # data.pos = torch.cat([data.pos, jitter], dim=-1)
-                # batch[i] = data
                 batch[i].x, batch[i].y = jitter, data.pos
         else:
-            # print(batch)
             batch = batch.to(device)
             reals = batch.pos
             jittered = add_multiplier_noise(reals.detach(), multiplier=5)
             orig_mse = mse(jittered, reals)
             batch.x, batch.y = jittered, batch.pos
-            # jittered = torch.cat(reals, jittered, dim=-1)
     elif dataset_type == "MPEG":
         if parallel:  # only paraller loader impl.ed
             batch = parallel_cuda(batch, device)
@@ -97,7 +96,7 @@ def train(model, optimizer, scheduler, loader, epoch: int):
     model.train()
 
     # show current lr
-    print(colorama.Fore.GREEN + "Current LR: %.5f" % optimizer.param_groups[0]["lr"])
+    print(colorama.Fore.GREEN + "Current LR: %.3E" % optimizer.param_groups[0]["lr"])
 
     total_psnr, total_mse = 0, 0
     for i, batch in enumerate(loader, 0):
@@ -110,7 +109,6 @@ def train(model, optimizer, scheduler, loader, epoch: int):
         loss = loss.mean()
         # print(out.shape, loss.shape)
 
-        # loss = mse(out, reals)
         psnr_loss = mse_to_psnr(loss)
         total_psnr += psnr_loss.detach().item()
         total_mse += loss.detach().item()
@@ -316,12 +314,20 @@ if __name__ == "__main__":
     else:
         model = model.to(device)
 
-    optimizer = optim.Adam(
-        [{"params": model.parameters(), "initial_lr": 0.002}],
-        lr=0.002,
-        weight_decay=5e-4,
-        betas=(0.9, 0.999),
-    )
+    print(colorama.Fore.RED + 'Using optimizer type %s' % optimizer_type)
+    if optimizer_type == 'Adam':
+        optimizer = optim.Adam(
+            [{"params": model.parameters(), "initial_lr": 0.002}],
+            lr=0.002,
+            weight_decay=5e-4,
+            betas=(0.9, 0.999),
+        )
+    elif optimizer_type == 'SGD':
+        optimizer = optim.SGD(
+            [{"params": model.parameters(), "initial_lr": 0.002}],
+            lr=0.002,
+            weight_decay=5e-4
+        )
     # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.65, last_epoch=beg_epochs)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=200, last_epoch=beg_epochs

@@ -81,7 +81,7 @@ class MPEGDataset(InMemoryDataset):
             y = torch.from_numpy(raw_data["colNet"])
             z = torch.from_numpy(raw_data["geoNet"])
             n_pc, n_point, _ = y.shape  # pc/point amounts
-            for idx in range(n_pc):
+            for idx in trange(n_pc):
                 data = Data(
                     x=y[idx],
                     y=y[idx],
@@ -94,18 +94,11 @@ class MPEGDataset(InMemoryDataset):
                     data = self.pre_transform(data)
                 # add noise to x
                 noise = self.noise_generator(data.y, self.sigma)
-                print(noise.norm())
+                # print(noise.norm())
                 data.x = data.x + noise
                 # print(mse(data.x, data.y))
                 data_list.append(data)
 
-        # # apply pre-transform
-        # if self.pre_transform is not None:
-        #     data_list = [self.pre_transform(data) for data in data_list]
-        # print(len(data_list))
-        # test = torch.tensor([mse(data.x, data.y) for data in data_list])
-        # sprint(tensorinfo(test))
-        # print(test.mean())
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
 
@@ -191,6 +184,9 @@ def sphere_noise(v, sigma=0.1, sample_times=100):
 
 
 def showData(data):
+    r"""
+    show info of components of Data obj.
+    """
     for key in data.keys:
         # process all tensors
         if torch.is_tensor(data[key]):
