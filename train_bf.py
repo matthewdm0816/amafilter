@@ -21,6 +21,7 @@ import torch
 import torch.optim as optim
 
 from bf import AmaFilter
+from dataloader import MPEGDataset, ADataListLoader, MPEGTransform
 from utils import *
 
 dataset_type = '40'
@@ -39,10 +40,15 @@ assert gpu_id in gpu_ids
 
 device = torch.device("cuda:%d" % gpu_id if torch.cuda.is_available() else "cpu")
 
+dataset_type = 'MPEG'
+dataset_type = 'MN40'
+assert dataset_type in ['MPEG', 'MN40']
+
 def train(model, optimizer, scheduler, loader, epoch: int):
     """
     NOTE: Need DROP_LAST=TRUE, in case batch length is not uniform
     """
+    global dataset_type
     model.train()
 
     # show current lr
@@ -104,6 +110,7 @@ def evaluate(model, loader, epoch: int):
     """
     NOTE: Need DROP_LAST=TRUE, in case batch length is not uniform
     """
+    global dataset_type
     model.eval()
     total_psnr, total_mse, total_orig_psnr = 0, 0, 0
     with torch.no_grad():
@@ -170,19 +177,29 @@ if __name__ == "__main__":
             )
 
     # model and data path
-    model_name = 'modelnet40-bf-64-128'
-    model_path = os.path.join('model', model_name, str(timestamp))
-    pl_path = 'modelnet40-1024'
-    data_path = os.path.join('/data', 'pkurei', pl_path)
+    if dataset_type == 'MN40':
+        model_name = 'modelnet40-bf-64-128'
+        model_path = os.path.join('model', model_name, str(timestamp))
+        pl_path = 'modelnet40-1024'
+        data_path = os.path.join('/data', 'pkurei', pl_path)
+    elif dataset_type == 'MPEG':
+        model_name = 'mpeg-bf'
+        model_path = os.path.join('model', model_name, str(timestamp))
+        # pl_path = 'pku'
+        data_path = os.path.join('data')
 
     for path in (data_path, model_path):
         check_dir(path, color=colorama.Fore.CYAN)
 
     # dataset and dataloader
-    train_dataset = ModelNet(root=data_path, name='40', train=True,
-        pre_transform=transform(samplePoints=samplePoints))
-    test_dataset = ModelNet(root=data_path, name='40', train=False,
-        pre_transform=transform(samplePoints=samplePoints))
+    if dataset_type == 'MN40': 
+        train_dataset = ModelNet(root=data_path, name='40', train=True,
+            pre_transform=transform(samplePoints=samplePoints))
+        test_dataset = ModelNet(root=data_path, name='40', train=False,
+            pre_transform=transform(samplePoints=samplePoints))
+    elif dataset_type == 'MPEG':
+        train_dataset = MPEGDataset(root=data_path, train=True, pre_transform=MPEGTransform)
+        test_dataset = MPEGDataset(root=data_path, train=True, pre_transform=MPEGTransform)
 
     if parallel: 
         train_loader = DataListLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
@@ -202,7 +219,10 @@ if __name__ == "__main__":
     model_milestone, optim_milestone, beg_epochs = None, None, 0 # comment this if need to load from milestone
 
     # model, optimizer, scheduler declaration
-    model = AmaFilter(3, 3, k=32)
+    if dataset_type =='MN40':
+        model = AmaFilter(3, 3, k=32)
+    elif dataset_type == 'MPEG':
+        model = AmaFilter(6, 6, k=32)
     
     # parallelization load
     if parallel:
