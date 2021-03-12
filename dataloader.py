@@ -64,29 +64,31 @@ class MPEGDataset(InMemoryDataset):
         return ["dataset.pt"]
 
     def process(self):
-        print(colorama.Fore.YELLOW + "Processing Dataset with σ={:.2E}".format(self.sigma))
+        print(
+            colorama.Fore.YELLOW + "Processing Dataset with σ={:.2E}".format(self.sigma)
+        )
         data_list = []
 
         # parse .mat PCs
         for i_name, raw_path in tqdm(enumerate(self.raw_paths)):
-            gc.collect()  # manually calls gc collect
             raw_data = spio.loadmat(raw_path)
-            # transfer to gpu to accel?
             y = torch.from_numpy(raw_data["colNet"])
             z = torch.from_numpy(raw_data["geoNet"])
-            # sprint(tensorinfo(y), y.shape, y.element_size() * y.nelement() / 1024 / 1024)
             n_pc, n_point, _ = y.shape  # pc/point amounts
-            noise_y = torch.randn_like(y).to(y) * self.sigma
             for idx in range(n_pc):
-                data_list.append(
-                    Data(
-                        x=noise_y[idx],
-                        y=y[idx],
-                        z=z[idx],
-                        # pos=torch.cat((noise_y[idx], z[idx]), dim=-1),
-                        label=i_name,
-                    )
+                data = Data(
+                    x=y[idx],
+                    y=y[idx],
+                    z=z[idx],
+                    # pos=torch.cat((noise_y[idx], z[idx]), dim=-1),
+                    label=i_name,
                 )
+                # apply pre_transform: i.e. whiten
+                if self.pre_transform is not None:
+                    data = self.pre_transform(data)
+                # add noise to x
+                data.x += torch.randn_like(data.y).to(data.y) * self.sigma
+                data_list.append(data)
 
         # apply pre-transform
         if self.pre_transform is not None:
@@ -128,7 +130,7 @@ def MPEGTransform(data):
     r"""
     Transformations for MPEG dataset
     Data(x, y, pos, label) | x, y, pos with shape [N, CHANNEL]
-    color => mean 0, std. 1
+    color => mean 0, std. 1.0
     """
     # data.x = whiten(data.x)
     for key in data.keys:

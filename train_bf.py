@@ -1,11 +1,14 @@
 """
 Bilateral Filter Training
 TODO: 
-    1. Test on modelnet40
-    2. Implement on MPEG large dataset
-    3. Implement parallel training
+    1. -Test on modelnet40-
+    2. -Implement on MPEG large dataset-
+    3. -Implement parallel training-
     4. Learn displacement vector rather than filtered position
-    5. Calculate Std. Dev. => Impl. 10-30 std. jitter
+    5. -Calculate Std. Dev. => Impl. 10-30 std. jitter-
+    6. Use specific channels for loss calc. (i.e. color only)
+    7. Impl. further benchmark metrics
+    8. Try alternative optimizers(esp. SGD)
 """
 
 from tensorboardX import SummaryWriter
@@ -34,7 +37,7 @@ gpu_id = 6
 # gpu_ids = [0, 1, 2, 7]
 gpu_ids = [6, 7]
 ngpu = len(gpu_ids)
-batch_size = 16 * ngpu  # bs depends on GPUs used
+batch_size = 8 * ngpu  # bs depends on GPUs used
 # os.environ['CUDA_VISIBLE_DEVICES'] = repr(gpu_ids)[1:-1]
 parallel = ngpu > 1
 assert gpu_id in gpu_ids
@@ -44,6 +47,46 @@ device = torch.device("cuda:%d" % gpu_id if torch.cuda.is_available() else "cpu"
 dataset_type = "MPEG"
 # dataset_type = 'MN40'
 assert dataset_type in ["MPEG", "MN40"]
+
+
+def process_batch(batch, parallel, dataset_type):
+    if dataset_type == "MN40":
+        if parallel:
+            batch = parallel_cuda(batch, device)
+            reals = batch.pos
+            jittered = [
+                add_multiplier_noise(real.detach(), multiplier=5).to(real)
+                for real in reals
+            ]
+            orig_mse = torch.tensor(
+                [mse(jitter, real) for jitter, real in zip(jittered, reals)]
+            ).mean()
+
+            # NOTE: concat real/jitter image
+            for i, (data, jitter) in enumerate(zip(batch, jittered)):
+                # data.pos = torch.cat([data.pos, jitter], dim=-1)
+                # batch[i] = data
+                batch[i].x, batch[i].y = jitter, data.pos
+        else:
+            # print(batch)
+            batch = batch.to(device)
+            reals = batch.pos
+            jittered = add_multiplier_noise(reals.detach(), multiplier=5)
+            orig_mse = mse(jittered, reals)
+            batch.x, batch.y = jittered, batch.pos
+            # jittered = torch.cat(reals, jittered, dim=-1)
+    elif dataset_type == "MPEG":
+        if parallel:  # only paraller loader impl.ed
+            batch = parallel_cuda(batch, device)
+            # in MPEG, Data(x, y, pos, label) ~ noised C/orig C/noised C-cat-orig P
+            orig_mse = torch.tensor([mse(data.x, data.y) for data in batch]).mean()
+            for i, data in enumerate(batch):
+                batch[i].x = torch.cat([data.x, data.z], dim=-1)
+                batch[i].y = torch.cat([data.y, data.z], dim=-1)
+        else:
+            raise NotImplementedError
+
+    return batch, orig_mse
 
 
 def train(model, optimizer, scheduler, loader, epoch: int):
@@ -59,44 +102,7 @@ def train(model, optimizer, scheduler, loader, epoch: int):
     total_psnr, total_mse = 0, 0
     for i, batch in enumerate(loader, 0):
         # torch.cuda.empty_cache()
-        if dataset_type == "MN40":
-            if parallel:
-                batch = parallel_cuda(batch, device)
-                reals = batch.pos
-                jittered = [
-                    add_multiplier_noise(real.detach(), multiplier=5).to(real)
-                    for real in reals
-                ]
-                orig_mse = torch.from_numpy(
-                    np.mean(
-                        [mse(jitter, real) for jitter, real in zip(jittered, reals)]
-                    )
-                )
-                # NOTE: concat real/jitter image
-                for _, (data, jitter) in enumerate(zip(batch, jittered)):
-                    # data.pos = torch.cat([data.pos, jitter], dim=-1)
-                    # batch[i] = data
-                    data.x, data.y = jitter, data.pos
-            else:
-                # print(batch)
-                batch = batch.to(device)
-                reals = batch.pos
-                jittered = add_multiplier_noise(reals.detach(), multiplier=5)
-                orig_mse = mse(jittered, reals)
-                batch.x, batch.y = jittered, batch.pos
-                # jittered = torch.cat(reals, jittered, dim=-1)
-        elif dataset_type == "MPEG":
-            if parallel:  # only paraller loader impl.ed
-                batch = parallel_cuda(batch, device)
-                # in MPEG, Data(x, y, pos, label) ~ noised C/orig C/noised C-cat-orig P
-                orig_mse = torch.from_numpy(
-                    np.mean([mse(data.x, data.y) for data in batch])
-                )
-                for data in batch:
-                    data.x = torch.cat([data.x, data.z], dim=-1)
-                    data.y = torch.cat([data.y, data.z], dim=-1)
-            else:
-                raise NotImplementedError
+        batch, orig_mse = process_batch(batch, parallel, dataset_type)
 
         orig_psnr = mse_to_psnr(orig_mse)
         model.zero_grad()
@@ -141,44 +147,7 @@ def evaluate(model, loader, epoch: int):
     with torch.no_grad():
         for i, batch in enumerate(loader, 0):
             # torch.cuda.empty_cache()
-            if dataset_type == "MN40":
-                if parallel:
-                    batch = parallel_cuda(batch, device)
-                    reals = batch.pos
-                    jittered = [
-                        add_multiplier_noise(real.detach(), multiplier=5).to(real)
-                        for real in reals
-                    ]
-                    orig_mse = torch.from_numpy(
-                        np.mean(
-                            [mse(jitter, real) for jitter, real in zip(jittered, reals)]
-                        )
-                    )
-                    # NOTE: concat real/jitter image
-                    for _, (data, jitter) in enumerate(zip(batch, jittered)):
-                        # data.pos = torch.cat([data.pos, jitter], dim=-1)
-                        # batch[i] = data
-                        data.x, data.y = jitter, data.pos
-                else:
-                    # print(batch)
-                    batch = batch.to(device)
-                    reals = batch.pos
-                    jittered = add_multiplier_noise(reals.detach(), multiplier=5)
-                    orig_mse = mse(jittered, reals)
-                    batch.x, batch.y = jittered, batch.pos
-                    # jittered = torch.cat(reals, jittered, dim=-1)
-            elif dataset_type == "MPEG":
-                if parallel:  # only paraller loader impl.ed
-                    batch = parallel_cuda(batch, device)
-                    # in MPEG, Data(x, y, pos, label) ~ noised C/orig C/noised C-cat-orig P
-                    orig_mse = torch.from_numpy(
-                        np.mean([mse(data.x, data.y) for data in batch])
-                    )
-                    for data in batch:
-                        data.x = torch.cat([data.x, data.z], dim=-1)
-                        data.y = torch.cat([data.y, data.z], dim=-1)
-                else:
-                    raise NotImplementedError
+            batch, orig_mse = process_batch(batch, parallel, dataset_type)
 
             orig_psnr = mse_to_psnr(orig_mse)
             out, loss = model(batch)
@@ -225,6 +194,7 @@ if __name__ == "__main__":
             json.dump({"timestamp": timestamp}, f)
 
     # model and data path
+    print(colorama.Fore.RED + 'Training on dataset %s' % dataset_type)
     if dataset_type == "MN40":
         model_name = "modelnet40-bf-64-128"
         model_path = os.path.join("model", model_name, str(timestamp))
@@ -295,14 +265,14 @@ if __name__ == "__main__":
                 training=True,
                 test_classes=[0, 1],
                 batch_size=batch_size,
-                shuffle=True
+                shuffle=True,
             )
             test_loader = ADataListLoader(
                 dataset,
-                training=True,
+                training=False,
                 test_classes=[0, 1],
                 batch_size=batch_size,
-                shuffle=True
+                shuffle=True,
             )
         else:
             raise NotImplementedError
