@@ -2,12 +2,13 @@
 Dataloaders of datasets: MPEG etc.
 """
 from scaffold import *
-from utils import tensorinfo
+from utils import tensorinfo, mse
 import torch
 import numpy as np
 import scipy.io as spio
 from torch_geometric.data import InMemoryDataset, Data
 from torch_geometric.data import DataListLoader, DataLoader
+import torch_geometric.nn as tgnn
 
 import sys
 import os
@@ -48,10 +49,15 @@ class MPEGDataset(InMemoryDataset):
     n_classes = [1520, 1520, 1520, 1520, 3180, 2160, 2160, 2070]
 
     def __init__(
-        self, root, training=True, transform=None, pre_transform=None, sigma=0.1
+        self,
+        root,
+        noise_generator,
+        transform=None,
+        pre_transform=None,
+        sigma=0.1,
     ):
         self.sigma = sigma
-        self.training = training
+        self.noise_generator = noise_generator
         super(MPEGDataset, self).__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -87,13 +93,19 @@ class MPEGDataset(InMemoryDataset):
                 if self.pre_transform is not None:
                     data = self.pre_transform(data)
                 # add noise to x
-                data.x += torch.randn_like(data.y).to(data.y) * self.sigma
+                noise = self.noise_generator(data.y, self.sigma)
+                print(noise.norm())
+                data.x = data.x + noise
+                # print(mse(data.x, data.y))
                 data_list.append(data)
 
-        # apply pre-transform
-        if self.pre_transform is not None:
-            data_list = [self.pre_transform(data) for data in data_list]
-        print(len(data_list))
+        # # apply pre-transform
+        # if self.pre_transform is not None:
+        #     data_list = [self.pre_transform(data) for data in data_list]
+        # print(len(data_list))
+        # test = torch.tensor([mse(data.x, data.y) for data in data_list])
+        # sprint(tensorinfo(test))
+        # print(test.mean())
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
 
@@ -148,6 +160,36 @@ def whiten(v):
     return (v - v.mean(dim=0)) / v.std(dim=0)
 
 
+def remove_ac(v):
+    return v - v.mean(dim=0)
+
+
+def pointset_diameter(v, sample_times=100):
+    r"""
+    Calc. diamter of point cloud
+    """
+    n_pts, fin = v.shape
+    eps = 1e-6
+    diameter = -1.0
+    for _ in range(sample_times):
+        index = tgnn.fps(v, ratio=2 / n_pts + eps)
+        distance = (v[index][0] - v[index][1]).norm()
+        diameter = max(distance, diameter)
+
+    return diameter
+
+
+def sphere_noise(v, sigma=0.1, sample_times=100):
+    r"""
+    Generate noise ~ sigma * d(PC), for single point cloud!
+    d(PC) ~ diameter of point cloud
+    """
+    diameter = pointset_diameter(v, sample_times)
+    noise = torch.randn_like(v) * sigma * diameter
+    noise = noise.to(v)
+    return noise
+
+
 def showData(data):
     for key in data.keys:
         # process all tensors
@@ -160,7 +202,10 @@ if __name__ == "__main__":
     Unit Test of dataset/dataloaders
     """
     dataset = MPEGDataset(
-        root="data", training=True, sigma=0.1, pre_transform=MPEGTransform
+        root="data-plain",
+        sigma=0.1,
+        noise_generator=sphere_noise
+        # pre_transform=MPEGTransform
     )
     train_loader = ADataListLoader(
         dataset,

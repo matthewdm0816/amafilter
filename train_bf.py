@@ -194,17 +194,17 @@ if __name__ == "__main__":
             json.dump({"timestamp": timestamp}, f)
 
     # model and data path
-    print(colorama.Fore.RED + 'Training on dataset %s' % dataset_type)
+    print(colorama.Fore.RED + "Training on dataset %s" % dataset_type)
     if dataset_type == "MN40":
         model_name = "modelnet40-bf-64-128"
         model_path = os.path.join("model", model_name, str(timestamp))
         pl_path = "modelnet40-1024"
         data_path = os.path.join("/data", "pkurei", pl_path)
     elif dataset_type == "MPEG":
-        model_name = "mpeg-bf"
+        model_name = "mpeg-bf-plain"
         model_path = os.path.join("model", model_name, str(timestamp))
         # pl_path = 'pku'
-        data_path = os.path.join("data")
+        data_path = os.path.join("data-plain")
 
     for path in (data_path, model_path):
         check_dir(path, color=colorama.Fore.CYAN)
@@ -258,7 +258,10 @@ if __name__ == "__main__":
                 pin_memory=True,
             )
     elif dataset_type == "MPEG":
-        dataset = MPEGDataset(root=data_path, pre_transform=MPEGTransform)
+        dataset = MPEGDataset(
+            root=data_path,
+            # pre_transform=MPEGTransform
+        )
         if parallel:
             train_loader = ADataListLoader(
                 dataset,
