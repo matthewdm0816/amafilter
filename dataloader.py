@@ -20,6 +20,7 @@ import gc
 import colorama
 from os.path import join
 from tqdm import *
+from multiprocessing import Process, Queue, Pool, TimeoutError
 
 colorama.init(autoreset=True)
 
@@ -55,9 +56,11 @@ class MPEGDataset(InMemoryDataset):
         transform=None,
         pre_transform=None,
         sigma=0.1,
+        num_workers=8,
     ):
         self.sigma = sigma
         self.noise_generator = noise_generator
+        self.num_workers = num_workers
         super(MPEGDataset, self).__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -69,6 +72,16 @@ class MPEGDataset(InMemoryDataset):
     def processed_file_names(self):
         return ["dataset.pt"]
 
+    @staticmethod
+    def _process_data(data, noise_generator, pre_transform=None, sigma=0.1):
+        if pre_transform is not None:
+            data = pre_transform(data)
+        # add noise to x
+        noise = noise_generator(data.y, sigma)
+        # print(noise.norm())
+        data.x = data.x + noise
+        return data
+
     def process(self):
         print(
             colorama.Fore.YELLOW + "Processing Dataset with σ={:.2E}".format(self.sigma)
@@ -76,28 +89,54 @@ class MPEGDataset(InMemoryDataset):
         data_list = []
 
         # parse .mat PCs
-        for i_name, raw_path in tqdm(enumerate(self.raw_paths)):
+        for i_name, raw_path in tqdm(
+            enumerate(self.raw_paths), total=len(self.raw_paths)
+        ):
             raw_data = spio.loadmat(raw_path)
             y = torch.from_numpy(raw_data["colNet"])
             z = torch.from_numpy(raw_data["geoNet"])
             n_pc, n_point, _ = y.shape  # pc/point amounts
-            for idx in trange(n_pc):
-                data = Data(
-                    x=y[idx],
-                    y=y[idx],
-                    z=z[idx],
-                    # pos=torch.cat((noise_y[idx], z[idx]), dim=-1),
-                    label=i_name,
-                )
-                # apply pre_transform: i.e. whiten
-                if self.pre_transform is not None:
-                    data = self.pre_transform(data)
-                # add noise to x
-                noise = self.noise_generator(data.y, self.sigma)
-                # print(noise.norm())
-                data.x = data.x + noise
-                # print(mse(data.x, data.y))
-                data_list.append(data)
+            if self.num_workers > 1:
+                # parallel process
+                print(colorama.Fore.GREEN + "Using %d cores..." % self.num_workers)
+                with Pool(processes=self.num_workers) as pool:
+                    result = pool.starmap(
+                        self._process_data,
+                        [
+                            (
+                                Data(
+                                    x=y[idx],
+                                    y=y[idx],
+                                    z=z[idx],
+                                    # pos=torch.cat((noise_y[idx], z[idx]), dim=-1),
+                                    label=i_name,
+                                ),
+                                self.noise_generator,
+                                self.pre_transform,
+                                self.sigma,
+                            )
+                            for idx in range(n_pc)
+                        ],
+                    )
+                    data_list += result
+            else:
+                for idx in trange(n_pc):
+                    data = Data(
+                        x=y[idx],
+                        y=y[idx],
+                        z=z[idx],
+                        # pos=torch.cat((noise_y[idx], z[idx]), dim=-1),
+                        label=i_name,
+                    )
+                    # apply pre_transform: i.e. whiten
+                    if self.pre_transform is not None:
+                        data = self.pre_transform(data)
+                    # add noise to x
+                    noise = self.noise_generator(data.y, self.sigma)
+                    # print(noise.norm())
+                    data.x = data.x + noise
+                    # print(mse(data.x, data.y))
+                    data_list.append(data)
 
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
@@ -154,6 +193,9 @@ def whiten(v):
 
 
 def remove_ac(v):
+    r"""
+    Remove AC component from data
+    """
     return v - v.mean(dim=0)
 
 
@@ -200,7 +242,8 @@ if __name__ == "__main__":
     dataset = MPEGDataset(
         root="data-plain",
         sigma=0.1,
-        noise_generator=sphere_noise
+        noise_generator=sphere_noise,
+        num_workers=16
         # pre_transform=MPEGTransform
     )
     train_loader = ADataListLoader(
