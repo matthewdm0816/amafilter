@@ -145,4 +145,5 @@ timestamp.json
 model/
 runs/
 data/
+data-plain/
 __pycache__/

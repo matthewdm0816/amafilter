@@ -180,16 +180,12 @@ class BilateralFilter(MessagePassing):
         n_nodes = x.size(0)
 
         # Compute edge weight
-        # print(edge_index, edge_index.shape)
-        # print(x.shape)
-        # print(edge_index.max(), edge_index.min())
         row, col = edge_index
         x_i, x_j = x[row], x[col]
         # sprint(x_i, x_j)
         # edge_weight: E * FOUT
         edge_weight = self._edge_weight(x_i, x_j)
         # FIXME: Why so small? far distance in initial embeddings
-        # sprint(tensorinfo(edge_weight))
 
         # Compute normalization W = D^{-1}W ~ RW
         # TODO: Variable Norm, Sym/None
