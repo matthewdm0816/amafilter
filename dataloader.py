@@ -64,7 +64,7 @@ class MPEGDataset(InMemoryDataset):
         return ["dataset.pt"]
 
     def process(self):
-        print(colorama.Fore.YELLOW + "Processing Dataset")
+        print(colorama.Fore.YELLOW + "Processing Dataset with σ={:.2E}".format(self.sigma))
         data_list = []
 
         # parse .mat PCs
@@ -82,7 +82,8 @@ class MPEGDataset(InMemoryDataset):
                     Data(
                         x=noise_y[idx],
                         y=y[idx],
-                        pos=torch.cat((noise_y[idx], z[idx]), dim=-1),
+                        z=z[idx],
+                        # pos=torch.cat((noise_y[idx], z[idx]), dim=-1),
                         label=i_name,
                     )
                 )

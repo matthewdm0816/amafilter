@@ -227,11 +227,11 @@ class AmaFilter(nn.Module):
         self.nfilters = len(self.filters)
 
     def forward(self, data):
-        """
-        To Impl. Parallelism, x = input-concat-target
+        r"""
+        ... 
         """
         # print(data)
-        target, batch, x = data.pos, data.batch, data.jittered
+        target, batch, x = data.y, data.batch, data.x
         # x, target= x0[:,:self.fin], x0[:,self.fin:]
         
         for i, filter in enumerate(self.filters):

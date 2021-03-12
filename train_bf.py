@@ -10,6 +10,7 @@ TODO:
 
 from tensorboardX import SummaryWriter
 import time, random, os, sys, gc, copy, colorama, json
+
 colorama.init(autoreset=True)
 from tqdm import *
 import numpy as np
@@ -24,25 +25,26 @@ from bf import AmaFilter
 from dataloader import MPEGDataset, ADataListLoader, MPEGTransform
 from utils import *
 
-dataset_type = '40'
+dataset_type = "40"
 samplePoints = 1024
 epochs = 1001
 milestone_period = 5
 use_sbn = True
-gpu_id = 0
+gpu_id = 6
 # gpu_ids = [0, 1, 2, 7]
-gpu_ids = [0, 1, 2, 3]
+gpu_ids = [6, 7]
 ngpu = len(gpu_ids)
-batch_size = 16 * ngpu # bs depends on GPUs used
+batch_size = 16 * ngpu  # bs depends on GPUs used
 # os.environ['CUDA_VISIBLE_DEVICES'] = repr(gpu_ids)[1:-1]
-parallel = (ngpu > 1) 
+parallel = ngpu > 1
 assert gpu_id in gpu_ids
 
 device = torch.device("cuda:%d" % gpu_id if torch.cuda.is_available() else "cpu")
 
-dataset_type = 'MPEG'
-dataset_type = 'MN40'
-assert dataset_type in ['MPEG', 'MN40']
+dataset_type = "MPEG"
+# dataset_type = 'MN40'
+assert dataset_type in ["MPEG", "MN40"]
+
 
 def train(model, optimizer, scheduler, loader, epoch: int):
     """
@@ -52,31 +54,49 @@ def train(model, optimizer, scheduler, loader, epoch: int):
     model.train()
 
     # show current lr
-    print(colorama.Fore.GREEN + "Current LR: %.5f" % optimizer.param_groups[0]['lr'])
-    
+    print(colorama.Fore.GREEN + "Current LR: %.5f" % optimizer.param_groups[0]["lr"])
+
     total_psnr, total_mse = 0, 0
     for i, batch in enumerate(loader, 0):
         # torch.cuda.empty_cache()
-        if parallel:
-            _, reals, _ = parallel_cuda(batch, device)
-            jittered = [
-                add_multiplier_noise(real.detach(), multiplier=5).to(real)
-                for real in reals
-            ]
-            orig_mse = sum([mse(jitter, real) for jitter, real in zip(jittered, reals)])
-            # NOTE: concat real/jitter image
-            for _, (data, jitter) in enumerate(zip(batch, jittered)):
-                # data.pos = torch.cat([data.pos, jitter], dim=-1)
-                # batch[i] = data
-                data.jittered = jitter
-        else:
-            # print(batch)
-            batch = batch.to(device)
-            reals = batch.pos
-            jittered = add_multiplier_noise(reals.detach(), multiplier=5)
-            orig_mse = mse(jittered, reals)
-            batch.jittered = jittered
-            # jittered = torch.cat(reals, jittered, dim=-1)
+        if dataset_type == "MN40":
+            if parallel:
+                batch = parallel_cuda(batch, device)
+                reals = batch.pos
+                jittered = [
+                    add_multiplier_noise(real.detach(), multiplier=5).to(real)
+                    for real in reals
+                ]
+                orig_mse = torch.from_numpy(
+                    np.mean(
+                        [mse(jitter, real) for jitter, real in zip(jittered, reals)]
+                    )
+                )
+                # NOTE: concat real/jitter image
+                for _, (data, jitter) in enumerate(zip(batch, jittered)):
+                    # data.pos = torch.cat([data.pos, jitter], dim=-1)
+                    # batch[i] = data
+                    data.x, data.y = jitter, data.pos
+            else:
+                # print(batch)
+                batch = batch.to(device)
+                reals = batch.pos
+                jittered = add_multiplier_noise(reals.detach(), multiplier=5)
+                orig_mse = mse(jittered, reals)
+                batch.x, batch.y = jittered, batch.pos
+                # jittered = torch.cat(reals, jittered, dim=-1)
+        elif dataset_type == "MPEG":
+            if parallel:  # only paraller loader impl.ed
+                batch = parallel_cuda(batch, device)
+                # in MPEG, Data(x, y, pos, label) ~ noised C/orig C/noised C-cat-orig P
+                orig_mse = torch.from_numpy(
+                    np.mean([mse(data.x, data.y) for data in batch])
+                )
+                for data in batch:
+                    data.x = torch.cat([data.x, data.z], dim=-1)
+                    data.y = torch.cat([data.y, data.z], dim=-1)
+            else:
+                raise NotImplementedError
 
         orig_psnr = mse_to_psnr(orig_mse)
         model.zero_grad()
@@ -88,23 +108,28 @@ def train(model, optimizer, scheduler, loader, epoch: int):
         psnr_loss = mse_to_psnr(loss)
         total_psnr += psnr_loss.detach().item()
         total_mse += loss.detach().item()
-        
+
         loss.backward()
         optimizer.step()
         # del jittered, reals
         if i % 10 == 0:
-            print(colorama.Fore.MAGENTA + "[%d/%d]MSE: %.3f, MSE-ORIG: %.3f, PSNR: %.3f, PSNR-ORIG: %.3f" % 
-                (epoch, i, 
-                loss.detach().item(), 
-                orig_mse.detach().item(),
-                psnr_loss.detach().item(), 
-                orig_psnr.detach().item()
+            print(
+                colorama.Fore.MAGENTA
+                + "[%d/%d]MSE: %.3f, MSE-ORIG: %.3f, PSNR: %.3f, PSNR-ORIG: %.3f"
+                % (
+                    epoch,
+                    i,
+                    loss.detach().item(),
+                    orig_mse.detach().item(),
+                    psnr_loss.detach().item(),
+                    orig_psnr.detach().item(),
                 )
             )
     scheduler.step()
     total_mse /= len(loader)
     total_psnr /= len(loader)
     return total_mse, total_psnr
+
 
 def evaluate(model, loader, epoch: int):
     """
@@ -116,26 +141,44 @@ def evaluate(model, loader, epoch: int):
     with torch.no_grad():
         for i, batch in enumerate(loader, 0):
             # torch.cuda.empty_cache()
-            if parallel:
-                _, reals, _ = parallel_cuda(batch, device)
-                jittered = [
-                    add_multiplier_noise(real.detach(), multiplier=5).to(real)
-                    for real in reals
-                ]
-                orig_mse = sum([mse(jitter, real) for jitter, real in zip(jittered, reals)])
-                # NOTE: concat real/jitter image
-                for _, (data, jitter) in enumerate(zip(batch, jittered)):
-                    # data.pos = torch.cat([data.pos, jitter], dim=-1)
-                    # batch[i] = data
-                    data.jittered = jitter
-            else:
-                # print(batch)
-                batch = batch.to(device)
-                reals = batch.pos
-                jittered = add_multiplier_noise(reals.detach(), multiplier=5)
-                orig_mse = mse(jittered, reals)
-                batch.jittered = jittered
-                # jittered = torch.cat(reals, jittered, dim=-1)
+            if dataset_type == "MN40":
+                if parallel:
+                    batch = parallel_cuda(batch, device)
+                    reals = batch.pos
+                    jittered = [
+                        add_multiplier_noise(real.detach(), multiplier=5).to(real)
+                        for real in reals
+                    ]
+                    orig_mse = torch.from_numpy(
+                        np.mean(
+                            [mse(jitter, real) for jitter, real in zip(jittered, reals)]
+                        )
+                    )
+                    # NOTE: concat real/jitter image
+                    for _, (data, jitter) in enumerate(zip(batch, jittered)):
+                        # data.pos = torch.cat([data.pos, jitter], dim=-1)
+                        # batch[i] = data
+                        data.x, data.y = jitter, data.pos
+                else:
+                    # print(batch)
+                    batch = batch.to(device)
+                    reals = batch.pos
+                    jittered = add_multiplier_noise(reals.detach(), multiplier=5)
+                    orig_mse = mse(jittered, reals)
+                    batch.x, batch.y = jittered, batch.pos
+                    # jittered = torch.cat(reals, jittered, dim=-1)
+            elif dataset_type == "MPEG":
+                if parallel:  # only paraller loader impl.ed
+                    batch = parallel_cuda(batch, device)
+                    # in MPEG, Data(x, y, pos, label) ~ noised C/orig C/noised C-cat-orig P
+                    orig_mse = torch.from_numpy(
+                        np.mean([mse(data.x, data.y) for data in batch])
+                    )
+                    for data in batch:
+                        data.x = torch.cat([data.x, data.z], dim=-1)
+                        data.y = torch.cat([data.y, data.z], dim=-1)
+                else:
+                    raise NotImplementedError
 
             orig_psnr = mse_to_psnr(orig_mse)
             out, loss = model(batch)
@@ -150,111 +193,182 @@ def evaluate(model, loader, epoch: int):
     total_mse /= len(loader)
     total_psnr /= len(loader)
     total_orig_psnr /= len(loader)
-    print(colorama.Fore.MAGENTA + "[%d]MSE: %.3f, PSNR: %.3f, PSNR-ORIG: %.3f" % (epoch, total_mse, total_psnr, total_orig_psnr))
+    print(
+        colorama.Fore.MAGENTA
+        + "[%d]MSE: %.3f, PSNR: %.3f, PSNR-ORIG: %.3f"
+        % (epoch, total_mse, total_psnr, total_orig_psnr)
+    )
     return total_mse, total_psnr, orig_psnr
+
 
 if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
-    print(colorama.Fore.MAGENTA + (
-        "Running in Single-GPU mode" if not parallel else 
-        "Running in Multiple-GPU mode with GPU {}".format(gpu_ids) )
+    print(
+        colorama.Fore.MAGENTA
+        + (
+            "Running in Single-GPU mode"
+            if not parallel
+            else "Running in Multiple-GPU mode with GPU {}".format(gpu_ids)
+        )
     )
 
     # training identifier
     try:
-        with open('timestamp.json', 'r') as f:
+        with open("timestamp.json", "r") as f:
             timestamp = json.load(f)["timestamp"] + 1
     except FileNotFoundError:
         # init timestamp
         timestamp = 1
     finally:
         # save timestamp
-        with open('timestamp.json', 'w') as f:
-            json.dump({
-                    "timestamp": timestamp
-                },
-                f
-            )
+        with open("timestamp.json", "w") as f:
+            json.dump({"timestamp": timestamp}, f)
 
     # model and data path
-    if dataset_type == 'MN40':
-        model_name = 'modelnet40-bf-64-128'
-        model_path = os.path.join('model', model_name, str(timestamp))
-        pl_path = 'modelnet40-1024'
-        data_path = os.path.join('/data', 'pkurei', pl_path)
-    elif dataset_type == 'MPEG':
-        model_name = 'mpeg-bf'
-        model_path = os.path.join('model', model_name, str(timestamp))
+    if dataset_type == "MN40":
+        model_name = "modelnet40-bf-64-128"
+        model_path = os.path.join("model", model_name, str(timestamp))
+        pl_path = "modelnet40-1024"
+        data_path = os.path.join("/data", "pkurei", pl_path)
+    elif dataset_type == "MPEG":
+        model_name = "mpeg-bf"
+        model_path = os.path.join("model", model_name, str(timestamp))
         # pl_path = 'pku'
-        data_path = os.path.join('data')
+        data_path = os.path.join("data")
 
     for path in (data_path, model_path):
         check_dir(path, color=colorama.Fore.CYAN)
 
     # dataset and dataloader
-    if dataset_type == 'MN40': 
-        train_dataset = ModelNet(root=data_path, name='40', train=True,
-            pre_transform=transform(samplePoints=samplePoints))
-        test_dataset = ModelNet(root=data_path, name='40', train=False,
-            pre_transform=transform(samplePoints=samplePoints))
-    elif dataset_type == 'MPEG':
-        train_dataset = MPEGDataset(root=data_path, train=True, pre_transform=MPEGTransform)
-        test_dataset = MPEGDataset(root=data_path, train=True, pre_transform=MPEGTransform)
-
-    if parallel: 
-        train_loader = DataListLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
-        test_loader = DataListLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
-    else:
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
-        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, drop_last=False, num_workers=16, pin_memory=True)
+    if dataset_type == "MN40":
+        train_dataset = ModelNet(
+            root=data_path,
+            name="40",
+            train=True,
+            pre_transform=transform(samplePoints=samplePoints),
+        )
+        test_dataset = ModelNet(
+            root=data_path,
+            name="40",
+            train=False,
+            pre_transform=transform(samplePoints=samplePoints),
+        )
+        if parallel:
+            train_loader = DataListLoader(
+                train_dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                drop_last=False,
+                num_workers=16,
+                pin_memory=True,
+            )
+            test_loader = DataListLoader(
+                test_dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                drop_last=False,
+                num_workers=16,
+                pin_memory=True,
+            )
+        else:
+            train_loader = DataLoader(
+                train_dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                drop_last=False,
+                num_workers=16,
+                pin_memory=True,
+            )
+            test_loader = DataLoader(
+                test_dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                drop_last=False,
+                num_workers=16,
+                pin_memory=True,
+            )
+    elif dataset_type == "MPEG":
+        dataset = MPEGDataset(root=data_path, pre_transform=MPEGTransform)
+        if parallel:
+            train_loader = ADataListLoader(
+                dataset,
+                training=True,
+                test_classes=[0, 1],
+                batch_size=batch_size,
+                shuffle=True
+            )
+            test_loader = ADataListLoader(
+                dataset,
+                training=True,
+                test_classes=[0, 1],
+                batch_size=batch_size,
+                shuffle=True
+            )
+        else:
+            raise NotImplementedError
 
     # tensorboard writer
     writer = SummaryWriter(comment=model_name)  # global steps => index of epoch
 
     # load model or init model
-    model_milestone, optim_milestone, beg_epochs = \
-        os.path.join('model', model_name, str(15), 'model-latest.save'), \
-        os.path.join('model', model_name, str(15), 'opt-latest.save'), \
-        20
-    model_milestone, optim_milestone, beg_epochs = None, None, 0 # comment this if need to load from milestone
+    model_milestone, optim_milestone, beg_epochs = (
+        os.path.join("model", model_name, str(15), "model-latest.save"),
+        os.path.join("model", model_name, str(15), "opt-latest.save"),
+        20,
+    )
+    model_milestone, optim_milestone, beg_epochs = (
+        None,
+        None,
+        0,
+    )  # comment this if need to load from milestone
 
     # model, optimizer, scheduler declaration
-    if dataset_type =='MN40':
+    if dataset_type == "MN40":
         model = AmaFilter(3, 3, k=32)
-    elif dataset_type == 'MPEG':
+    elif dataset_type == "MPEG":
         model = AmaFilter(6, 6, k=32)
-    
+
     # parallelization load
     if parallel:
         if use_sbn:
             try:
                 # fix sync-batchnorm
                 from sync_batchnorm import convert_model
+
                 model = convert_model(model)
             except ModuleNotFoundError:
                 raise ModuleNotFoundError("Sync-BN plugin not found")
             # NOTE: DataParallel call MUST after model definition completes
         model = DataParallel(model, device_ids=gpu_ids, output_device=gpu_id).to(device)
-    else:   
+    else:
         model = model.to(device)
 
-    optimizer = optim.Adam([{'params': model.parameters(), 'initial_lr': 0.002}],
-                                lr=0.002, weight_decay=5e-4, betas=(0.9, 0.999))
+    optimizer = optim.Adam(
+        [{"params": model.parameters(), "initial_lr": 0.002}],
+        lr=0.002,
+        weight_decay=5e-4,
+        betas=(0.9, 0.999),
+    )
     # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.65, last_epoch=beg_epochs)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200, last_epoch=beg_epochs)
-    
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=200, last_epoch=beg_epochs
+    )
+
     if model_milestone is not None:
         load_model(model, optimizer, model_milestone, optim_milestone, beg_epochs)
     else:
         init_weights(model)
 
     batch_cnt = len(train_loader)
-    print(colorama.Fore.MAGENTA + "Begin training with: batch size %d, %d batches in total" % (batch_size, batch_cnt))
+    print(
+        colorama.Fore.MAGENTA
+        + "Begin training with: batch size %d, %d batches in total"
+        % (batch_size, batch_cnt)
+    )
 
     for epoch in trange(beg_epochs, epochs + 1):
         train_mse, train_psnr = train(model, optimizer, scheduler, train_loader, epoch)
         eval_mse, eval_psnr, orig_psnr = evaluate(model, test_loader, epoch)
-        
 
         # save model for each <milestone_period> epochs (e.g. 10 rounds)
         if epoch % milestone_period == 0 and epoch != 0:
@@ -264,24 +378,31 @@ if __name__ == "__main__":
             #     torch.save(model.module.state_dict(), os.path.join(model_path, 'model-latest.save'))
             #     torch.save(optimizer.state_dict(), os.path.join(model_path, 'opt-latest.save'))
             # else:
-            torch.save(model.state_dict(), os.path.join(model_path, 'model-%d.save' % (epoch)))
-            torch.save(optimizer.state_dict(), os.path.join(model_path, 'opt-%d.save' % (epoch)))
-            torch.save(model.state_dict(), os.path.join(model_path, 'model-latest.save'))
-            torch.save(optimizer.state_dict(), os.path.join(model_path, 'opt-latest.save'))
-            
+            torch.save(
+                model.state_dict(), os.path.join(model_path, "model-%d.save" % (epoch))
+            )
+            torch.save(
+                optimizer.state_dict(),
+                os.path.join(model_path, "opt-%d.save" % (epoch)),
+            )
+            torch.save(
+                model.state_dict(), os.path.join(model_path, "model-latest.save")
+            )
+            torch.save(
+                optimizer.state_dict(), os.path.join(model_path, "opt-latest.save")
+            )
+
         # log to tensorboard
         record_dict = {
-            'train_mse': train_mse,
-            'train_psnr': train_psnr,
-            'test_mse': eval_mse,
-            'test_psnr': eval_psnr,
+            "train_mse": train_mse,
+            "train_psnr": train_psnr,
+            "test_mse": eval_mse,
+            "test_psnr": eval_psnr,
         }
 
         for key in record_dict:
             if not isinstance(record_dict[key], dict):
                 writer.add_scalar(key, record_dict[key], epoch)
-            else: 
-                writer.add_scalars(key, record_dict[key], epoch) 
+            else:
+                writer.add_scalars(key, record_dict[key], epoch)
                 # add multiple records
-    
-
