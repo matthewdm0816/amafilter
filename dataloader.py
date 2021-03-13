@@ -72,6 +72,15 @@ def pointset_diameter(v, sample_times=100):
     return diameter
 
 
+def normal_noise(v, sigma=0.1):
+    r"""
+    Generate noise ~ sigma, for single PC
+    """
+    noise = torch.randn_like(v) * sigma * diameter
+    noise = noise.to(v)
+    return noise
+
+
 def sphere_noise(v, sigma=0.1, sample_times=100):
     r"""
     Generate noise ~ sigma * d(PC), for single point cloud!
@@ -87,7 +96,7 @@ def sphere_noise(v, sigma=0.1, sample_times=100):
 class MPEGDataset(InMemoryDataset):
     """
     Parse MPEG Dataset
-    imporved from EternalHope's
+    imporved from jxr
     Composed with a list of Data(x<i.e. noised y>, y, pos(x-z concat), label)
     """
 

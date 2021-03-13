@@ -10,7 +10,7 @@ import torch.nn as nn
 
 # from torchsummary import summary
 import torch_geometric.nn as tgnn
-from torch_geometric.nn import GCNConv, SGConv, MessagePassing, knn_graph
+from torch_geometric.nn import GCNConv, SGConv, MessagePassing, knn_graph, DataParallel
 import torch_geometric as tg
 from torch_geometric.datasets import ModelNet
 from torch_geometric.data import DataLoader, DataListLoader
@@ -95,43 +95,45 @@ def evaluate(model, loader, epoch: int):
     """
     NOTE: Need DROP_LAST=TRUE, in case batch length is not uniform
     """
-    global parallel
+    global parallel, dataset_type
     model.eval()
-    total_psnr, total_mse, total_orig_psnr = 0, 0, 0
+    total_psnr, total_mse, total_orig_mse = 0, 0, 0
     with torch.no_grad():
         for i, batch in enumerate(loader, 0):
-            batch, orig_mse = process_batch(batch, parallel=parallel)
+            batch, orig_mse = process_batch(
+                batch, parallel=parallel, dataset_type=dataset_type
+            )
 
             orig_psnr = mse_to_psnr(orig_mse)
             loss = model(batch)
 
             psnr_loss = mse_to_psnr(loss)
-            total_orig_psnr += orig_psnr.detach().item()
             total_psnr += psnr_loss.detach().item()
             total_mse += loss.detach().item()
+            total_orig_mse += orig_mse.detach().item()
 
     total_mse /= len(loader)
     total_psnr /= len(loader)
-    total_orig_psnr /= len(loader)
+    total_orig_mse /= len(loader)
     print(
         colorama.Fore.MAGENTA
-        + "[%d]MSE: %.3f, PSNR: %.3f, PSNR-ORIG: %.3f"
-        % (epoch, total_mse, total_psnr, total_orig_psnr)
+        + "[%d]MSE: %.3f, PSNR: %.3f, PSNR-MSE: %.3f"
+        % (epoch, total_mse, total_psnr, total_orig_mse)
     )
-    return total_mse, total_psnr, orig_psnr
+    return total_mse, total_psnr, total_orig_mse
 
 
 if __name__ == "__main__":
     """
     Naive BF Tests
     """
-    batch_size = 256
-    gpu_id = 7
+    batch_size = 512
+    gpu_id = 1
     # gpu_ids = [0, 1, 2, 7]
-    gpu_ids = [7]
+    gpu_ids = [1]
     ngpu = len(gpu_ids)
     # os.environ['CUDA_VISIBLE_DEVICES'] = repr(gpu_ids)[1:-1]
-    parallel = (ngpu > 1) or True
+    parallel = (ngpu > 1) or True  # use 1 gpu parallel
     assert gpu_id in gpu_ids
 
     device = torch.device("cuda:%d" % gpu_id if torch.cuda.is_available() else "cpu")
@@ -145,7 +147,7 @@ if __name__ == "__main__":
         # pl_path = 'pku'
         data_path = os.path.join("data-0.50")
     print(
-        colorama.Fore.RED + "Testing on dataset %s at %s" % (dataset_type, dataset_dir)
+        colorama.Fore.RED + "Testing on dataset %s at %s" % (dataset_type, data_path)
     )
 
     for path in (data_path,):
@@ -206,7 +208,7 @@ if __name__ == "__main__":
             train_loader = ADataListLoader(
                 dataset,
                 training=True,
-                test_classes=[0, 1],
+                test_classes=[],
                 batch_size=batch_size,
                 shuffle=True,
             )
@@ -222,15 +224,20 @@ if __name__ == "__main__":
 
     # baseline test
     records = defaultdict(dict)
-    max_psnr = -10
+    max_psnr, min_mse = -10, 1e10
     best_sigma, best_gamma = None, None
-    for sigma in (0.0001, 0.001, 0.01, 0.03, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2, 5, 10):
+    for sigma in (0.001, 0.01, 0.03, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2, 5, 10):
         for gamma in (0, 0.1, 0.3, 0.5, 0.75, 0.9, 0.95, 0.99):
             print(
                 colorama.Fore.MAGENTA
-                + "Testing config - sigma: %.3f, gamma: %.3f" % (sigma, gamma)
+                + "Testing config - sigma: %.3E, gamma: %.3E" % (sigma, gamma)
             )
-            model = NaiveBilateralFilter(fin=3, sigma=1 / sigma, gamma=gamma).to(device)
+            
+            model = NaiveBilateralFilter(fin=6, sigma=1 / sigma, gamma=gamma)
+            if parallel:
+                model = DataParallel(model, device_ids=gpu_ids, output_device=gpu_id).to(device)
+            else:
+                model = model.to(device)
             model.eval()
 
             total_mse, total_psnr, orig_psnr = evaluate(model, train_loader, 0)
@@ -238,14 +245,16 @@ if __name__ == "__main__":
 
             if total_psnr > max_psnr:
                 best_sigma, best_gamma = sigma, gamma
-                max_psnr = total_psnr
+                max_psnr, min_mse = total_psnr, total_mse
 
     print(
         colorama.Fore.GREEN
-        + "Max PSNR: %.3f @ sigma: %.3f, gamma: %.3f"
-        % (max_psnr, best_sigma, best_gamma)
+        + "Max PSNR: %.3f, min MSE: %.3f, ORIG-MSE: %.3f@ sigma: %.3f, gamma: %.3f"
+        % (max_psnr, min_mse, orig_psnr, best_sigma, best_gamma)
     )
     # record in JSON
-    record_str = json.dumps({"best_args": (best_sigma, best_gamma), "records": records})
+    record_str = json.dumps(
+        {"dataset": data_path, "best_args": (best_sigma, best_gamma), "records": records}
+    )
     with open("naive-baseline.json", "w") as f:
         f.write(record_str)

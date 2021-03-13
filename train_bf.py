@@ -111,7 +111,7 @@ def train(model, optimizer, scheduler, loader, epoch: int):
     # show current lr
     print(colorama.Fore.GREEN + "Current LR: %.3E" % optimizer.param_groups[0]["lr"])
 
-    total_psnr, total_mse = 0, 0
+    total_psnr, total_mse, total_orig_psnr = 0, 0, 0
     for i, batch in tqdm(enumerate(loader, 0), total=len(loader)):
         # torch.cuda.empty_cache()
         batch, orig_mse = process_batch(batch, parallel, dataset_type)
@@ -126,6 +126,7 @@ def train(model, optimizer, scheduler, loader, epoch: int):
         # total_orig_mse = orig_mse.detach().mean
         total_psnr += psnr_loss.detach().item()
         total_mse += loss.detach().item()
+        total_orig_psnr += orig_psnr.detach().item()
 
         loss.backward()
         optimizer.step()
@@ -146,7 +147,8 @@ def train(model, optimizer, scheduler, loader, epoch: int):
     scheduler.step()
     total_mse /= len(loader)
     total_psnr /= len(loader)
-    return total_mse, total_psnr
+    total_orig_psnr /= len(loader)
+    return total_mse, total_psnr, total_orig_psnr
 
 
 def evaluate(model, loader, epoch: int):
@@ -360,7 +362,7 @@ if __name__ == "__main__":
     )
 
     for epoch in trange(beg_epochs, epochs + 1):
-        train_mse, train_psnr = train(model, optimizer, scheduler, train_loader, epoch)
+        train_mse, train_psnr, train_orig_psnr = train(model, optimizer, scheduler, train_loader, epoch)
         eval_mse, eval_psnr, orig_psnr = evaluate(model, test_loader, epoch)
 
         # save model for each <milestone_period> epochs (e.g. 10 rounds)
@@ -391,6 +393,8 @@ if __name__ == "__main__":
             "train_psnr": train_psnr,
             "test_mse": eval_mse,
             "test_psnr": eval_psnr,
+            "train_orig_psnr": train_orig_psnr,
+            "test_orig_psnr": test_orig_psnr,
         }
 
         for key in record_dict:

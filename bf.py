@@ -1,8 +1,9 @@
-"""
+r"""
 Bilateral Filter Models Definition
 TODO: 
     1. Try multiple W_ij type
     2. Try different layer stucture
+    3. Add graph reg. term, i.e. \tau x^T L x
 """
 
 import torch
