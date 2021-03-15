@@ -76,7 +76,7 @@ def normal_noise(v, sigma=0.1):
     r"""
     Generate noise ~ sigma, for single PC
     """
-    noise = torch.randn_like(v) * sigma * diameter
+    noise = torch.randn_like(v) * sigma
     noise = noise.to(v)
     return noise
 
@@ -94,10 +94,11 @@ def sphere_noise(v, sigma=0.1, sample_times=100):
 
 
 class MPEGDataset(InMemoryDataset):
-    """
+    r"""
     Parse MPEG Dataset
     imporved from jxr
     Composed with a list of Data(x<i.e. noised y>, y, pos(x-z concat), label)
+    transform order: pre-T => +noise
     """
 
     names = [
@@ -115,7 +116,7 @@ class MPEGDataset(InMemoryDataset):
     def __init__(
         self,
         root,
-        noise_generator=sphere_noise,
+        noise_generator=normal_noise,
         transform=None,
         pre_transform=None,
         sigma=0.1,
@@ -200,6 +201,8 @@ class MPEGDataset(InMemoryDataset):
                     noise = self.noise_generator(data.y, self.sigma)
                     # print(noise.norm())
                     data.x = data.x + noise
+                    # check nan
+                    assert not torch.any(torch.isnan(data.x)), "NaN detected!"
                     # print(mse(data.x, data.y))
                     data_list.append(data)
 
@@ -314,7 +317,7 @@ if __name__ == "__main__":
         for sigma in args.sigma:
             # copy source raw
             orig_dataset_dir = "data/raw"
-            dataset_dir = "data-%.2f" % sigma
+            dataset_dir = "data-%.1f" % sigma
             raw_dir = os.path.join(dataset_dir, "raw")
             proc_dir = os.path.join(dataset_dir, 'processed')
             if os.path.exists(raw_dir):

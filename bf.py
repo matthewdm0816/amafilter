@@ -168,7 +168,7 @@ class BilateralFilter(MessagePassing):
 
     def message(self, x_i, x_j, norm, edge_weight):
         y = norm.view(-1, 1) * edge_weight.view(-1, 1) * x_j
-        # selective. clamp
+        # selective clamp
         return torch.clamp(y, -10, 10)
 
     def forward(self, x, edge_index):
@@ -225,7 +225,7 @@ class AmaFilter(nn.Module):
 
     def forward(self, data):
         r"""
-        ... 
+        data ~ Data(x, y, [z, ][batch, ])
         """
         # print(data)
         target, batch, x = data.y, data.batch, data.x
@@ -234,7 +234,7 @@ class AmaFilter(nn.Module):
         for i, filter in enumerate(self.filters):
             # dynamic graph? yes!
             edge_index = knn_graph(x, k=self.k, batch=batch, loop=False)
-            # print(edge_index, edge_index.shape)
+            # print(edge_index.shape)
             # NOTE: denselinks added
             y = filter(x, edge_index)
             x = torch.cat((x, y), dim=-1) if i != self.nfilters - 1 else y
