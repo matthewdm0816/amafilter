@@ -37,8 +37,9 @@ warn = scaf.warn
 def whiten(v):
     r"""
     Whiten data to mean 0, std. 1
+    NOTE: for std~=0 data, add eps=1e-6
     """
-    return (v - v.mean(dim=0)) / v.std(dim=0)
+    return (v - v.mean(dim=0)) / (v.std(dim=0) + 1e-6)
 
 
 def remove_ac(v):
@@ -141,9 +142,11 @@ class MPEGDataset(InMemoryDataset):
         if pre_transform is not None:
             data = pre_transform(data)
         # add noise to x
+        assert not torch.any(torch.isnan(data.y)), "NaN detected!"
         noise = noise_generator(data.y, sigma)
         # print(noise.norm())
         data.x = data.x + noise
+        # assert not torch.any(torch.isnan(data.x)), "NaN detected!"
         # print(noise.norm())
         return data
 
@@ -202,7 +205,7 @@ class MPEGDataset(InMemoryDataset):
                     # print(noise.norm())
                     data.x = data.x + noise
                     # check nan
-                    assert not torch.any(torch.isnan(data.x)), "NaN detected!"
+                    assert not torch.any(torch.isnan(data.x)), "NaN detected @ %d!" % (len(data_list))
                     # print(mse(data.x, data.y))
                     data_list.append(data)
 
@@ -249,7 +252,16 @@ def MPEGTransform(data, func=whiten):
         # process all tensors
         if torch.is_tensor(data[key]):
             # print(key)
+            # assert not torch.any(torch.isnan(data[key])), "NaN detected before!"
+            # orig_data = data[key]
             data[key] = func(data[key])
+            # try:
+            #     assert not torch.any(torch.isnan(data[key])), "NaN detected after!"
+            # except AssertionError:
+            #     sprint(tensorinfo(orig_data))
+            #     sprint(orig_data.mean(dim=0))
+            #     sprint(orig_data.std(dim=0))
+            #     assert False
     return data
 
 
@@ -332,6 +344,6 @@ if __name__ == "__main__":
             dataset = MPEGDataset(
                 root=dataset_dir,
                 sigma=sigma,
-                num_workers=16,
+                num_workers=1,
                 pre_transform=MPEGTransform,
             )

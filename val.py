@@ -19,7 +19,7 @@ from dataloader import MPEGTransform, MPEGDataset, ADataListLoader
 #     row, col = edge_index
 #     print((c[row] - c[col]).norm(dim=-1))
 #     assert edge_index.shape[1] == 16000
-dataset = MPEGDataset(root="data-0.50", pre_transform=MPEGTransform)
+dataset = MPEGDataset(root="data-0.1", pre_transform=MPEGTransform)
 parallel = True
 batch_size = 128
 spec = dataset[13587]

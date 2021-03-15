@@ -34,9 +34,9 @@ samplePoints = 1024
 epochs = 1001
 milestone_period = 5
 use_sbn = True
-gpu_id = 4
+gpu_id = 0
 # gpu_ids = [0, 1, 2, 7]
-gpu_ids = [4, 5, 6, 7]
+gpu_ids = [0, 1, 2, 3]
 ngpu = len(gpu_ids)
 batch_size = 8 * ngpu  # bs depends on GPUs used
 # os.environ['CUDA_VISIBLE_DEVICES'] = repr(gpu_ids)[1:-1]
@@ -215,10 +215,10 @@ if __name__ == "__main__":
         pl_path = "modelnet40-1024"
         data_path = os.path.join("/data", "pkurei", pl_path)
     elif dataset_type == "MPEG":
-        model_name = "mpeg-bf-0.50"
+        model_name = "mpeg-bf-1.0"
         model_path = os.path.join("model", model_name, str(timestamp))
         # pl_path = 'pku'
-        data_path = os.path.join("data-0.50")
+        data_path = os.path.join("data-1.0")
 
     for path in (data_path, model_path):
         check_dir(path, color=colorama.Fore.CYAN)
@@ -363,7 +363,7 @@ if __name__ == "__main__":
 
     for epoch in trange(beg_epochs, epochs + 1):
         train_mse, train_psnr, train_orig_psnr = train(model, optimizer, scheduler, train_loader, epoch)
-        eval_mse, eval_psnr, orig_psnr = evaluate(model, test_loader, epoch)
+        eval_mse, eval_psnr, test_orig_psnr = evaluate(model, test_loader, epoch)
 
         # save model for each <milestone_period> epochs (e.g. 10 rounds)
         if epoch % milestone_period == 0 and epoch != 0:

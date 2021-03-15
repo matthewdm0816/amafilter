@@ -156,11 +156,11 @@ if __name__ == "__main__":
     """
     Naive BF Tests
     """
-    gpu_id = 6
+    gpu_id = 0
     # gpu_ids = [0, 1, 2, 7]
-    gpu_ids = [6, 7]
+    gpu_ids = [0, 1, 2, 3]
     ngpu = len(gpu_ids)
-    batch_size = 64 * ngpu
+    batch_size = 512 * ngpu
     # os.environ['CUDA_VISIBLE_DEVICES'] = repr(gpu_ids)[1:-1]
     parallel = (ngpu > 1) or True  # use 1 gpu parallel
     assert gpu_id in gpu_ids
@@ -174,7 +174,7 @@ if __name__ == "__main__":
         data_path = os.path.join("/data", "pkurei", pl_path)
     elif dataset_type == "MPEG":
         # pl_path = 'pku'
-        data_path = os.path.join("data-0.1")
+        data_path = os.path.join("data-1.0")
     print(colorama.Fore.RED + "Testing on dataset %s at %s" % (dataset_type, data_path))
 
     for path in (data_path,):
@@ -253,10 +253,12 @@ if __name__ == "__main__":
     records = defaultdict(dict)
     max_psnr, min_mse = -10, 1e10
     best_sigma, best_gamma = None, None
+    # sigma: kernel std
+    # gamma: original image ratio
     for sigma, gamma in tqdm(
         product(
-            (0.001, 0.01, 0.03, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2, 5, 10),
-            (0, 0.1, 0.3, 0.5, 0.75, 0.9, 0.95, 0.99),
+            (0.001, 0.01, 0.05, 0.1, 0.3, 0.5, 1, 2, 5, 10),
+            (0, 0.1, 0.3, 0.5, 0.75, 0.9, 0.99),
         )
     ):
         print(
