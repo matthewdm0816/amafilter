@@ -1,4 +1,4 @@
-"""
+r"""
 Bilateral Filter Training
 TODO: 
     1. -Test on modelnet40-
@@ -9,7 +9,12 @@ TODO:
     6. Use specific channels for loss calc. (i.e. color only)
     7. Impl. further benchmark metrics
     8. Try alternative optimizers(esp. SGD)
-    9. Why MSE mismatch?
+    9. -Why MSE mismatch? :NaN data!-
+    10. Smaller/faster model
+    11. Re-generate dataset
+    12. Re-split dataset in in-class fashion
+    13. Add attention? 
+    14. Patch aggregation (and test)
 """
 
 from tensorboardX import SummaryWriter
