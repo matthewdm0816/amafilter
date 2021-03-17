@@ -220,10 +220,10 @@ if __name__ == "__main__":
         pl_path = "modelnet40-1024"
         data_path = os.path.join("/data", "pkurei", pl_path)
     elif dataset_type == "MPEG":
-        model_name = "mpeg-bf-1.0"
+        model_name = "mpeg-bf-5.0"
         model_path = os.path.join("model", model_name, str(timestamp))
         # pl_path = 'pku'
-        data_path = os.path.join("data-1.0")
+        data_path = os.path.join("data-5.0")
 
     for path in (data_path, model_path):
         check_dir(path, color=colorama.Fore.CYAN)

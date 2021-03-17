@@ -1,4 +1,3 @@
-
 ### Bilateral Filter Training TODOs 
 1. ~~Test on modelnet40~~
 2. ~~Implement on MPEG large dataset~~
@@ -18,3 +17,4 @@
 16. Add graph reg. term, i.e. $\tau x^T L x$
 17. Try different layer stucture
 18. Try multiple $W_ij$(i.e. edge weight) type
+19. Move embedding layer into BF(i.e. reduce repeated node embedding computation)(by make an alternative Weight)
