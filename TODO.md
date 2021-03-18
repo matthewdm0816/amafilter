@@ -10,7 +10,7 @@
 9. ~~Why MSE mismatch? :NaN data!~~
 10. ~~Smaller/faster model~~(See 19)
 11. Re-generate dataset
-    - How to reduce number of patches to acceptable amount: take 10 patches
+    - ~~How to reduce number of patches to acceptable amount: take 10 patches~~
     - FPS might be clustering in point clound sequence
 12. Re-split dataset in in-class fashion
 13. Add attention? 

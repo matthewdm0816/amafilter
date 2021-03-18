@@ -24,6 +24,7 @@ colorama.init(autoreset=True)
 from tqdm import *
 import numpy as np
 import pretty_errors
+from pprint import pprint
 
 from torch_geometric.nn import DataParallel
 from torch_geometric.data import DataListLoader, DataLoader
@@ -49,14 +50,13 @@ batch_size = 24 * ngpu  # bs depends on GPUs used
 parallel = ngpu > 1
 assert gpu_id in gpu_ids
 
-optimizer_type = "SGD"
-assert optimizer_type in ["Adam", "SGD"]
-
 device = torch.device("cuda:%d" % gpu_id if torch.cuda.is_available() else "cpu")
 
+optimizer_type = "SGD"
+assert optimizer_type in ["Adam", "SGD"]
 dataset_type = "MPEG"
-# dataset_type = 'MN40'
 assert dataset_type in ["MPEG", "MN40"]
+filter = BilateralFilterv2
 
 
 def process_batch(batch, parallel, dataset_type):
@@ -316,7 +316,6 @@ if __name__ == "__main__":
     if dataset_type == "MN40":
         model = AmaFilter(3, 3, k=32)
     elif dataset_type == "MPEG":
-        filter = BilateralFilterv2
         model = AmaFilter(6, 6, k=32, filter=filter)
         print(colorama.Fore.MAGENTA + "Using filter type %s" % filter.__name__)
 
@@ -335,6 +334,11 @@ if __name__ == "__main__":
     else:
         model = model.to(device)
 
+    # for name, param in model.named_parameters():
+    #     print(name)
+    
+    # exit(0)
+    # optimizer & scheduler
     print(colorama.Fore.RED + "Using optimizer type %s" % optimizer_type)
     if optimizer_type == "Adam":
         optimizer = optim.Adam(
@@ -349,15 +353,19 @@ if __name__ == "__main__":
     elif optimizer_type == "SGD":
         # Using SGD Nesterov-accelerated with Momentum
         optimizer = optim.SGD(
-            [{"params": model.parameters(), "initial_lr": 0.002}],
+            [
+                {"params": model.module.filters[0].embedding.parameters(), "initial_lr": 0.002 * 32},
+                {"params": model.module.filters[1].embedding.parameters(), "initial_lr": 0.002 * 32},
+                {"params": model.module.filters[2].embedding.parameters(), "initial_lr": 0.002 * 32},
+                # {"params": model.parameters(), "initial_lr": 0.002},
+            ],
             lr=0.002,
             weight_decay=5e-4,
             momentum=0.9,
             nesterov=True,
         )
-    # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.65, last_epoch=beg_epochs)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=75, last_epoch=beg_epochs
+        optimizer, T_max=100, last_epoch=beg_epochs
     )
 
     if model_milestone is not None:
