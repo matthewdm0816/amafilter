@@ -24,5 +24,6 @@
     - Why the performance is worse? same pipeline
     - increase of batchsize? 32->64(8 on each gpu) does not degenerates the performances
     - might due to multiplied lr on embedding MLPs
+    - experiment using layer-specified learning rate
 20. Add flag to switch v2/v0 BFs
 
