@@ -38,8 +38,14 @@ def whiten(v):
     r"""
     Whiten data to mean 0, std. 1
     NOTE: for std~=0 data, add eps=1e-6
+    OPT: could merge into one
     """
-    return (v - v.mean(dim=0)) / (v.std(dim=0) + 1e-6)
+    if len(v.shape) == 2: # single PC
+        return (v - v.mean(dim=0)) / (v.std(dim=0) + 1e-6)
+    elif len(v.shape) == 3: # batch
+        return (v - v.mean(dim=-2, keepdim=True)) / (v.std(dim=-2, keepdim=True) + 1e-6)
+    else:
+        raise ValueError
 
 
 def remove_ac(v):
@@ -250,7 +256,7 @@ def MPEGTransform(data, func=whiten):
     # data.x = whiten(data.x)
     for key in data.keys:
         # process all tensors
-        if torch.is_tensor(data[key]):
+        if torch.is_tensor(data[key]) and key != 'kernel_z':
             # print(key)
             # assert not torch.any(torch.isnan(data[key])), "NaN detected before!"
             # orig_data = data[key]

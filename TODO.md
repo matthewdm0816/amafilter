@@ -10,6 +10,8 @@
 9. ~~Why MSE mismatch? :NaN data!~~
 10. Smaller/faster model
 11. Re-generate dataset
+    - How to reduce number of patches to acceptable amount
+    - FPS might be clustering in point clound sequence
 12. Re-split dataset in in-class fashion
 13. Add attention? 
 14. Patch aggregation (and test)
@@ -18,3 +20,5 @@
 17. Try different layer stucture
 18. Try multiple $W_ij$(i.e. edge weight) type
 19. Move embedding layer into BF(i.e. reduce repeated node embedding computation)(by make an alternative Weight)
+    - Need testing
+
