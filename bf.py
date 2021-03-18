@@ -149,8 +149,6 @@ class BilateralFilter(MessagePassing):
         Return ~ [N, ]
         """
         # normalize
-        # sprint(edge_index.shape, edge_weight.shape, num_nodes)
-        # print(edge_index.shape, edge_weight.shape)
         out = torch.zeros((num_nodes,)).to(edge_weight)
         return out.scatter_add_(dim=0, index=edge_index, src=edge_weight)
 
@@ -225,7 +223,7 @@ class Embedding(nn.Module):
         elif embedding == "MLP":
             try:
                 hidden_layers = [fin] + kwargs["hidden_layers"]
-            except:
+            except KeyError:
                 hidden_layers = [fin, fout]
                 warn("Weight#hidden_layers not specified, using fout instead")
             self.embedding = nn.Sequential(
@@ -240,10 +238,12 @@ class Embedding(nn.Module):
 
 
 class BilateralFilterv2(MessagePassing):
-    def __init__(self, fin, fout, collate='gaussian'):
+    def __init__(self, fin, fout, collate="gaussian"):
         super().__init__(aggr="add")
+        # TODO: Alternative simplification
+        # self.embedding = Embedding(fout, embedding="MLP", hidden_layers=[256, 128, fout])
         self.fproj = nn.Linear(fin, fout)
-        self.embedding = Embedding(fout, embedding='MLP', hidden_layers=[128, fout])
+        self.embedding = Embedding(fout, embedding="MLP", hidden_layers=[128, fout])
         self.collate = collate
         if collate == "gaussian":
             self.out = module_wrapper(lambda x: torch.exp(-((x) ** 2)))
@@ -270,7 +270,7 @@ class BilateralFilterv2(MessagePassing):
         out ~ E * 1
         """
         # TODO: explicitly show embeddings of xs
-        return self.out(x_i - x_j) + 1e-7
+        return self.out(torch.norm(x_i - x_j, dim=1)) + 1e-9
 
     def message(self, x_i, x_j, norm, edge_weight):
         y = norm.view(-1, 1) * edge_weight.view(-1, 1) * x_j
@@ -283,26 +283,22 @@ class BilateralFilterv2(MessagePassing):
         edge_index ~ 2 * E
         """
         x = self.fproj(x)  # => N * FOUT
-        x = self.embedding(x)
+        x = self.embedding(x) # => N * FOUT through embedding layer
 
         n_nodes = x.size(0)
 
         # Compute edge weight
         row, col = edge_index
         x_i, x_j = x[row], x[col]
-        # sprint(x_i, x_j)
         # edge_weight: E * FOUT
         edge_weight = self._edge_weight(x_i, x_j)
-        # FIXME: Why so small? far distance in initial embeddings
 
-        # Compute normalization W = D^{-1}W ~ RW
+        # Compute normalization W = D^{-1}W ~ Random Walk Laplacian
         # TODO: Variable Norm, Sym/None
         deg = self._weighted_degree(col, edge_weight, n_nodes)
         norm = deg.pow(-1.0)
         norm = norm[row]  # norm[i] = norm[row[i] ~ indexof(x_i)]
-        # sprint(tensorinfo(norm))
         # => E * 1
-        # print(norm.shape, edge_weight.shape)
         return self.propagate(edge_index, x=x, norm=norm, edge_weight=edge_weight)
 
 
@@ -315,21 +311,16 @@ class AmaFilter(nn.Module):
         - Bottleneck?
     """
 
-    def __init__(self, fin=6, fout=6, k=16):
+    def __init__(self, fin=6, fout=6, k=16, filter=BilateralFilter):
         super().__init__()
         self.fin, self.fout, self.k = fin, fout, k
         self.filters = nn.ModuleList(
             [
-                BilateralFilter(fin, 64),
-                BilateralFilter(64 + fin, 128),
-                BilateralFilter(64 + fin + 128, fout),
+                filter(fin, 64),
+                filter(64 + fin, 128),
+                filter(64 + fin + 128, fout),
             ]
         )
-        # self.filters = nn.ModuleList([
-        #     BilateralFilter(fin, 128),
-        #     # BilateralFilter(64, 128),
-        #     BilateralFilter(128 + fin, fout)
-        # ])
 
         self.nfilters = len(self.filters)
 
@@ -339,7 +330,6 @@ class AmaFilter(nn.Module):
         """
         # print(data)
         target, batch, x = data.y, data.batch, data.x
-        # x, target= x0[:,:self.fin], x0[:,self.fin:]
 
         for i, filter in enumerate(self.filters):
             # dynamic graph? yes!

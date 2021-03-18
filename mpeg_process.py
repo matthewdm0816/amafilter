@@ -14,6 +14,7 @@ import numpy as np
 from plyfile import PlyData, PlyElement
 import colorama
 import pretty_errors
+from typing import Optional, Union
 from tqdm import *
 
 from utils import *
@@ -33,7 +34,7 @@ ply_paths = ["longdress.ply"]
 out_paths = ["longdress.pt"]
 
 
-def read_mesh(path):
+def read_mesh(path: str):
     r"""
     Read mesh XYZ/RGB from PLY file
     """
@@ -56,7 +57,7 @@ def read_mesh(path):
     return Data(color=color, pos=pos)
 
 
-def process_ply(ply_path: str, n_patch: int = 100, k: int = 2048, down_sample=None):
+def process_ply(ply_path: str, n_patch: int = 100, k: int = 2048, down_sample: Union[None, int, float]=None, cuda: bool=False):
     r"""
     Processes PLY file from path, convert to PC
     :return patch-pos + patch-color + patch-kernel
@@ -64,6 +65,9 @@ def process_ply(ply_path: str, n_patch: int = 100, k: int = 2048, down_sample=No
     mesh_data = read_mesh(ply_path)
     print(colorama.Fore.GREEN + "Loaded PLY file %s" % ply_path)
     pos, color = mesh_data.pos, mesh_data.color
+    if cuda: 
+        pos = pos.to(torch.device('cuda:7'))
+        color = color.to(pos)
     # down sampling using uniform method
     n_pts = pos.shape[0]
     if down_sample is not None:
@@ -88,7 +92,7 @@ def process_ply(ply_path: str, n_patch: int = 100, k: int = 2048, down_sample=No
     return data_list
 
 
-def process_dataset(dataset_path: str, names: list):
+def process_dataset(dataset_path: str, names: list, cuda: bool=False):
     import re
 
     regex = re.compile("\.ply$")  # match all .ply files
@@ -99,7 +103,7 @@ def process_dataset(dataset_path: str, names: list):
             for file in tqdm(files):
                 if regex.search(file) is not None:
                     # print(file)
-                    res = process_ply(os.path.join(folder, file), n_patch=10, k=2048)
+                    res = process_ply(os.path.join(folder, file), n_patch=10, k=2048, cuda=cuda)
                     data_list += res
                     # break # debug: load only one
     # combine into one large data
@@ -134,11 +138,13 @@ class MPEGLargeDataset(InMemoryDataset):
         pre_transform=None,
         sigma=0.1,
         num_workers=8,
+        cuda=False
     ):
         self.sigma = sigma
         self.noise_generator = noise_generator
         self.num_workers = num_workers
         self.root = root
+        self.cuda = cuda
         super(MPEGLargeDataset, self).__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -154,7 +160,7 @@ class MPEGLargeDataset(InMemoryDataset):
         print(
             colorama.Fore.YELLOW + "Processing Dataset with σ={:.2E}".format(self.sigma)
         )
-        data = process_dataset(self.root, names=self.names)
+        data = process_dataset(self.root, names=self.names, cuda=self.cuda)
         # apply pre_transform: i.e. whiten
         if self.pre_transform is not None:
             data = self.pre_transform(data)
@@ -186,5 +192,5 @@ if __name__ == "__main__":
     Process MPEG Seq. Dataset
     """
     dataset = MPEGLargeDataset(
-        root=dataset_path, noise_generator=normal_noise, pre_transform=MPEGTransform
+        root=dataset_path, noise_generator=normal_noise, pre_transform=MPEGTransform, cuda=False
     )
