@@ -18,7 +18,7 @@ TODO:
 """
 
 from tensorboardX import SummaryWriter
-import time, random, os, sys, gc, copy, colorama, json
+import time, random, os, sys, gc, copy, colorama, json, re
 
 colorama.init(autoreset=True)
 from tqdm import *
@@ -56,7 +56,7 @@ optimizer_type = "SGD"
 assert optimizer_type in ["Adam", "SGD"]
 dataset_type = "MPEG"
 assert dataset_type in ["MPEG", "MN40"]
-filter = BilateralFilterv2
+bfilter = BilateralFilterv2
 
 
 def process_batch(batch, parallel, dataset_type):
@@ -316,8 +316,8 @@ if __name__ == "__main__":
     if dataset_type == "MN40":
         model = AmaFilter(3, 3, k=32)
     elif dataset_type == "MPEG":
-        model = AmaFilter(6, 6, k=32, filter=filter)
-        print(colorama.Fore.MAGENTA + "Using filter type %s" % filter.__name__)
+        model = AmaFilter(6, 6, k=32, filter=bfilter)
+        print(colorama.Fore.MAGENTA + "Using filter type %s" % bfilter.__name__)
 
     # parallelization load
     if parallel:
@@ -336,7 +336,7 @@ if __name__ == "__main__":
 
     # for name, param in model.named_parameters():
     #     print(name)
-    
+
     # exit(0)
     # optimizer & scheduler
     print(colorama.Fore.RED + "Using optimizer type %s" % optimizer_type)
@@ -352,12 +352,57 @@ if __name__ == "__main__":
         )
     elif optimizer_type == "SGD":
         # Using SGD Nesterov-accelerated with Momentum
+        # Selective lr adjustment
+        my_list = [
+            "module.filters.0.embedding",
+            "module.filters.1.embedding",
+            "module.filters.2.embedding",
+        ]
+        params = list(
+            map(
+                lambda x: x[1],
+                list(
+                    filter(
+                        lambda kv: any(
+                            [
+                                re.search(pattern, kv[0]) is not None
+                                for pattern in my_list
+                            ]
+                        ),
+                        model.named_parameters(),
+                    )
+                ),
+            )
+        )
+        base_params = list(
+            map(
+                lambda x: x[1],
+                list(
+                    filter(
+                        lambda kv: all(
+                            [re.search(pattern, kv[0]) is None for pattern in my_list]
+                        ),
+                        model.named_parameters(),
+                    )
+                ),
+            )
+        )
+        # print("===============================")
+        # print(params)
+        # print("===============================")
+        # print(base_params)
+        # print("===============================")
+        # exit(0)
         optimizer = optim.SGD(
             [
-                {"params": model.module.filters[0].embedding.parameters(), "initial_lr": 0.002 * 32},
-                {"params": model.module.filters[1].embedding.parameters(), "initial_lr": 0.002 * 32},
-                {"params": model.module.filters[2].embedding.parameters(), "initial_lr": 0.002 * 32},
-                # {"params": model.parameters(), "initial_lr": 0.002},
+                {
+                    "params": params,
+                    "initial_lr": 0.002 * 10,
+                },
+                {
+                    "params": base_params,
+                    "initial_lr": 0.002,
+                },
             ],
             lr=0.002,
             weight_decay=5e-4,
