@@ -107,7 +107,9 @@ def process_batch(batch, parallel, dataset_type):
     return result_batch, orig_mse
 
 
-def train(model, optimizer, scheduler, loader, dataset_type, parallel: bool, epoch: int):
+def train(
+    model, optimizer, scheduler, loader, dataset_type, parallel: bool, epoch: int
+):
     """
     NOTE: Need DROP_LAST=TRUE, in case batch length is not uniform
     """
@@ -157,7 +159,7 @@ def train(model, optimizer, scheduler, loader, dataset_type, parallel: bool, epo
     return total_mse, total_psnr, total_orig_psnr
 
 
-def evaluate(model, loader, dataset_type, parallel:bool, epoch: int):
+def evaluate(model, loader, dataset_type, parallel: bool, epoch: int):
     """
     NOTE: Need DROP_LAST=TRUE, in case batch length is not uniform
     """
@@ -192,27 +194,6 @@ def evaluate(model, loader, dataset_type, parallel:bool, epoch: int):
 
 if __name__ == "__main__":
     timestamp = init_train(parallel, gpu_ids)
-    # torch.backends.cudnn.benchmark = True
-    # print(
-    #     colorama.Fore.MAGENTA
-    #     + (
-    #         "Running in Single-GPU mode"
-    #         if not parallel
-    #         else "Running in Multiple-GPU mode with GPU {}".format(gpu_ids)
-    #     )
-    # )
-
-    # # training identifier
-    # try:
-    #     with open("timestamp.json", "r") as f:
-    #         timestamp = json.load(f)["timestamp"] + 1
-    # except FileNotFoundError:
-    #     # init timestamp
-    #     timestamp = 1
-    # finally:
-    #     # save timestamp
-    #     with open("timestamp.json", "w") as f:
-    #         json.dump({"timestamp": timestamp}, f)
 
     # model and data path
     print(colorama.Fore.RED + "Training on dataset %s" % dataset_type)
@@ -230,73 +211,6 @@ if __name__ == "__main__":
     for path in (data_path, model_path):
         check_dir(path, color=colorama.Fore.CYAN)
 
-    # dataset and dataloader
-    # if dataset_type == "MN40":
-    #     train_dataset = ModelNet(
-    #         root=data_path,
-    #         name="40",
-    #         train=True,
-    #         pre_transform=transform(samplePoints=samplePoints),
-    #     )
-    #     test_dataset = ModelNet(
-    #         root=data_path,
-    #         name="40",
-    #         train=False,
-    #         pre_transform=transform(samplePoints=samplePoints),
-    #     )
-    #     if parallel:
-    #         train_loader = DataListLoader(
-    #             train_dataset,
-    #             batch_size=batch_size,
-    #             shuffle=True,
-    #             drop_last=False,
-    #             num_workers=16,
-    #             pin_memory=True,
-    #         )
-    #         test_loader = DataListLoader(
-    #             test_dataset,
-    #             batch_size=batch_size,
-    #             shuffle=True,
-    #             drop_last=False,
-    #             num_workers=16,
-    #             pin_memory=True,
-    #         )
-    #     else:
-    #         train_loader = DataLoader(
-    #             train_dataset,
-    #             batch_size=batch_size,
-    #             shuffle=True,
-    #             drop_last=False,
-    #             num_workers=16,
-    #             pin_memory=True,
-    #         )
-    #         test_loader = DataLoader(
-    #             test_dataset,
-    #             batch_size=batch_size,
-    #             shuffle=True,
-    #             drop_last=False,
-    #             num_workers=16,
-    #             pin_memory=True,
-    #         )
-    # elif dataset_type == "MPEG":
-    #     dataset = MPEGDataset(root=data_path, pre_transform=MPEGTransform)
-    #     if parallel:
-    #         train_loader = ADataListLoader(
-    #             dataset,
-    #             training=True,
-    #             test_classes=[0, 1],
-    #             batch_size=batch_size,
-    #             shuffle=True,
-    #         )
-    #         test_loader = ADataListLoader(
-    #             dataset,
-    #             training=False,
-    #             test_classes=[0, 1],
-    #             batch_size=batch_size,
-    #             shuffle=True,
-    #         )
-    #     else:
-    #         raise NotImplementedError
     dataset, test_dataset, train_loader, test_loader = get_data(
         dataset_type,
         data_path,
@@ -320,27 +234,6 @@ if __name__ == "__main__":
         0,
     )  # comment this if need to load from milestone
 
-    # model, optimizer, scheduler declaration
-    # if dataset_type == "MN40":
-    #     model = AmaFilter(3, 3, k=32)
-    # elif dataset_type == "MPEG":
-    #     model = AmaFilter(6, 6, k=32, filter=bfilter)
-    #     print(colorama.Fore.MAGENTA + "Using filter type %s" % bfilter.__name__)
-
-    # # parallelization load
-    # if parallel:
-    #     if use_sbn:
-    #         try:
-    #             # fix sync-batchnorm
-    #             from sync_batchnorm import convert_model
-
-    #             model = convert_model(model)
-    #         except ModuleNotFoundError:
-    #             raise ModuleNotFoundError("Sync-BN plugin not found")
-    #         # NOTE: DataParallel call MUST after model definition completes
-    #     model = DataParallel(model, device_ids=gpu_ids, output_device=gpu_id).to(device)
-    # else:
-    #     model = model.to(device)
     model = get_model(
         dataset_type,
         bfilter,
@@ -357,73 +250,81 @@ if __name__ == "__main__":
     # exit(0)
 
     # optimizer & scheduler
-    print(colorama.Fore.RED + "Using optimizer type %s" % optimizer_type)
-    if optimizer_type == "Adam":
-        optimizer = optim.Adam(
-            [
-                {"params": model.parameters(), "initial_lr": 0.002},
-                # {"params": model.parameters(), "initial_lr": 0.002}
-            ],
-            lr=0.002,
-            weight_decay=5e-4,
-            betas=(0.9, 0.999),
-        )
-    elif optimizer_type == "SGD":
-        # Using SGD Nesterov-accelerated with Momentum
-        # Selective lr adjustment
-        my_list = [
-            "module.filters.0.embedding",
-            "module.filters.1.embedding",
-            "module.filters.2.embedding",
-        ]
-        params = list(
-            map(
-                lambda x: x[1],
-                list(
-                    filter(
-                        lambda kv: any(
-                            [
-                                re.search(pattern, kv[0]) is not None
-                                for pattern in my_list
-                            ]
-                        ),
-                        model.named_parameters(),
-                    )
-                ),
-            )
-        )
-        base_params = list(
-            map(
-                lambda x: x[1],
-                list(
-                    filter(
-                        lambda kv: all(
-                            [re.search(pattern, kv[0]) is None for pattern in my_list]
-                        ),
-                        model.named_parameters(),
-                    )
-                ),
-            )
-        )
-        optimizer = optim.SGD(
-            [
-                {
-                    "params": params,
-                    "initial_lr": 0.002 * 10,
-                },
-                {
-                    "params": base_params,
-                    "initial_lr": 0.002,
-                },
-            ],
-            lr=0.002,
-            weight_decay=5e-4,
-            momentum=0.9,
-            nesterov=True,
-        )
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=100, last_epoch=beg_epochs
+    my_list = [
+        "module.filters.0.embedding",
+        "module.filters.1.embedding",
+        "module.filters.2.embedding",
+    ]
+    optimizer, scheduler = get_optimizer(
+        model, optimizer_type, my_list, 0.002, 0.002 * 10, beg_epochs
     )
+    # print(colorama.Fore.RED + "Using optimizer type %s" % optimizer_type)
+    # if optimizer_type == "Adam":
+    #     optimizer = optim.Adam(
+    #         [
+    #             {"params": model.parameters(), "initial_lr": 0.002},
+    #             # {"params": model.parameters(), "initial_lr": 0.002}
+    #         ],
+    #         lr=0.002,
+    #         weight_decay=5e-4,
+    #         betas=(0.9, 0.999),
+    #     )
+    # elif optimizer_type == "SGD":
+    #     # Using SGD Nesterov-accelerated with Momentum
+    #     # Selective lr adjustment
+    #     my_list = [
+    #         "module.filters.0.embedding",
+    #         "module.filters.1.embedding",
+    #         "module.filters.2.embedding",
+    #     ]
+    #     params = list(
+    #         map(
+    #             lambda x: x[1],
+    #             list(
+    #                 filter(
+    #                     lambda kv: any(
+    #                         [
+    #                             re.search(pattern, kv[0]) is not None
+    #                             for pattern in my_list
+    #                         ]
+    #                     ),
+    #                     model.named_parameters(),
+    #                 )
+    #             ),
+    #         )
+    #     )
+    #     base_params = list(
+    #         map(
+    #             lambda x: x[1],
+    #             list(
+    #                 filter(
+    #                     lambda kv: all(
+    #                         [re.search(pattern, kv[0]) is None for pattern in my_list]
+    #                     ),
+    #                     model.named_parameters(),
+    #                 )
+    #             ),
+    #         )
+    #     )
+    #     optimizer = optim.SGD(
+    #         [
+    #             {
+    #                 "params": params,
+    #                 "initial_lr": 0.002 * 10,
+    #             },
+    #             {
+    #                 "params": base_params,
+    #                 "initial_lr": 0.002,
+    #             },
+    #         ],
+    #         lr=0.002,
+    #         weight_decay=5e-4,
+    #         momentum=0.9,
+    #         nesterov=True,
+    #     )
+    # scheduler = optim.lr_scheduler.CosineAnnealingLR(
+    #     optimizer, T_max=100, last_epoch=beg_epochs
+    # )
 
     if model_milestone is not None:
         load_model(model, optimizer, model_milestone, optim_milestone, beg_epochs)
@@ -441,7 +342,9 @@ if __name__ == "__main__":
         train_mse, train_psnr, train_orig_psnr = train(
             model, optimizer, scheduler, train_loader, dataset_type, parallel, epoch
         )
-        eval_mse, eval_psnr, test_orig_psnr = evaluate(model, test_loader, dataset_type, parallel, epoch)
+        eval_mse, eval_psnr, test_orig_psnr = evaluate(
+            model, test_loader, dataset_type, parallel, epoch
+        )
 
         # save model for each <milestone_period> epochs (e.g. 10 rounds)
         if epoch % milestone_period == 0 and epoch != 0:

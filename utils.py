@@ -272,3 +272,73 @@ def get_model(
         model = model.to(device)
     return model
 
+def get_optimizer(model, optimizer_type, my_list, lr, alt_lr, beg_epochs):
+    from torch import optim
+    print(colorama.Fore.RED + "Using optimizer type %s" % optimizer_type)
+    if optimizer_type == "Adam":
+        optimizer = optim.Adam(
+            [
+                {"params": model.parameters(), "initial_lr": 0.002},
+                # {"params": model.parameters(), "initial_lr": 0.002}
+            ],
+            lr=0.002,
+            weight_decay=5e-4,
+            betas=(0.9, 0.999),
+        )
+    elif optimizer_type == "SGD":
+        # Using SGD Nesterov-accelerated with Momentum
+        # Selective lr adjustment
+        # my_list = [
+        #     "module.filters.0.embedding",
+        #     "module.filters.1.embedding",
+        #     "module.filters.2.embedding",
+        # ]
+        params = list(
+            map(
+                lambda x: x[1],
+                list(
+                    filter(
+                        lambda kv: any(
+                            [
+                                re.search(pattern, kv[0]) is not None
+                                for pattern in my_list
+                            ]
+                        ),
+                        model.named_parameters(),
+                    )
+                ),
+            )
+        )
+        base_params = list(
+            map(
+                lambda x: x[1],
+                list(
+                    filter(
+                        lambda kv: all(
+                            [re.search(pattern, kv[0]) is None for pattern in my_list]
+                        ),
+                        model.named_parameters(),
+                    )
+                ),
+            )
+        )
+        optimizer = optim.SGD(
+            [
+                {
+                    "params": params,
+                    "initial_lr": alt_lr,
+                },
+                {
+                    "params": base_params,
+                    "initial_lr": lr,
+                },
+            ],
+            lr=0.002,
+            weight_decay=5e-4,
+            momentum=0.9,
+            nesterov=True,
+        )
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=100, last_epoch=beg_epochs
+    )
+    return optimizer, scheduler
