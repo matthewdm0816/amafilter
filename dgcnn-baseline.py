@@ -120,29 +120,32 @@ if __name__ == "__main__":
     else:
         model = model.to(device)
 
-    print(colorama.Fore.RED + "Using optimizer type %s" % optimizer_type)
-    if optimizer_type == "Adam":
-        optimizer = optim.Adam(
-            [
-                {"params": model.parameters(), "initial_lr": 0.002},
-            ],
-            lr=0.002,
-            weight_decay=5e-4,
-            betas=(0.9, 0.999),
-        )
-    elif optimizer_type == "SGD":
-        # Using SGD Nesterov-accelerated with Momentum
-        optimizer = optim.SGD(
-            [
-                {"params": model.parameters(), "initial_lr": 0.002},
-            ],
-            lr=0.002,
-            weight_decay=5e-4,
-            momentum=0.9,
-            nesterov=True,
-        )
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=100, last_epoch=beg_epochs
+    # print(colorama.Fore.RED + "Using optimizer type %s" % optimizer_type)
+    # if optimizer_type == "Adam":
+    #     optimizer = optim.Adam(
+    #         [
+    #             {"params": model.parameters(), "initial_lr": 0.002},
+    #         ],
+    #         lr=0.002,
+    #         weight_decay=5e-4,
+    #         betas=(0.9, 0.999),
+    #     )
+    # elif optimizer_type == "SGD":
+    #     # Using SGD Nesterov-accelerated with Momentum
+    #     optimizer = optim.SGD(
+    #         [
+    #             {"params": model.parameters(), "initial_lr": 0.002},
+    #         ],
+    #         lr=0.002,
+    #         weight_decay=5e-4,
+    #         momentum=0.9,
+    #         nesterov=True,
+    #     )
+    # scheduler = optim.lr_scheduler.CosineAnnealingLR(
+    #     optimizer, T_max=100, last_epoch=beg_epochs
+    # )
+    optimizer, scheduler = get_optimizer(
+        model, optimizer_type, [], 0.002, 0.002, beg_epochs
     )
 
     if model_milestone is not None:
@@ -161,7 +164,9 @@ if __name__ == "__main__":
         train_mse, train_psnr, train_orig_psnr = train(
             model, optimizer, scheduler, train_loader, dataset_type, parallel, epoch
         )
-        eval_mse, eval_psnr, test_orig_psnr = evaluate(model, test_loader, dataset_type, parallel, epoch)
+        eval_mse, eval_psnr, test_orig_psnr = evaluate(
+            model, test_loader, dataset_type, parallel, epoch
+        )
 
         # save model for each <milestone_period> epochs (e.g. 10 rounds)
         if epoch % milestone_period == 0 and epoch != 0:
