@@ -31,10 +31,14 @@
 22. Dynamic as graph connection => t as feature
 
 ### Comparisons
-| $\sigma$ | 1    | 5     | 10   |
-| -------- | ---- | ----- | ---- |
-| Original | 1    | 25    | 100  |
-| Plain BF | 0.30 | 8.76  |      |
-| AmaBF    | 0.13 | 0.50  |      |
-| DGCNN    |      | 0.74  |      |
+| $\sigma$ | 1    | 5    | 10   |
+| -------- | ---- | ---- | ---- |
+| Original | 1    | 25   | 100  |
+| Plain BF | 0.30 | 8.76 |      |
+| AmaBF    | 0.13 | 0.50 |      |
+| DGCNN    |      | 0.74 |      |
+| GAT      |      | <1.0 |      |
+
+
+
 

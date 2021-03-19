@@ -14,6 +14,7 @@ from torch_geometric.nn import DynamicEdgeConv, EdgeConv
 import torch_scatter as tscatter
 from tensorboardX import SummaryWriter
 import numpy as np
+import re
 
 import random, math, colorama, os, json
 from collections import defaultdict
@@ -21,13 +22,14 @@ from tqdm import *
 from itertools import product
 from typing import Optional, List
 import pretty_errors
+import importlib
 
 from scaffold import Scaffold
 from utils import *
-from train_bf import process_batch
+from train_bf import process_batch, train, evaluate, get_data
 from dataloader import ADataListLoader, MPEGDataset, MPEGTransform
 from bf import MLP
-from train_bf import train, evaluate, get_data
+from gat_baseline import GATDenoiser
 
 scaf = Scaffold()
 scaf.debug()
@@ -42,7 +44,6 @@ gpu_id = 0
 # gpu_ids = [0, 1, 2, 7]
 gpu_ids = [0, 1, 2, 3, 4, 5]
 ngpu = len(gpu_ids)
-batch_size = 24 * ngpu  # bs depends on GPUs used
 # os.environ['CUDA_VISIBLE_DEVICES'] = repr(gpu_ids)[1:-1]
 parallel = ngpu > 1
 assert gpu_id in gpu_ids
@@ -84,24 +85,13 @@ if __name__ == "__main__":
         pl_path = "modelnet40-1024"
         data_path = os.path.join("/data", "pkurei", pl_path)
     elif dataset_type == "MPEG":
-        model_name = "mpeg-dgcnn-5.0v3sgd"
+        model_name = "mpeg-gat-5.0sgd"
         model_path = os.path.join("model", model_name, str(timestamp))
         # pl_path = 'pku'
         data_path = os.path.join("data-5.0")
 
     for path in (data_path, model_path):
         check_dir(path, color=colorama.Fore.CYAN)
-
-    dataset, test_dataset, train_loader, test_loader = get_data(
-        dataset_type,
-        data_path,
-        batch_size=batch_size,
-        samplePoints=samplePoints,
-        parallel=parallel,
-    )
-    print(train_loader)
-
-    writer = SummaryWriter(comment=model_name)
 
     model_milestone, optim_milestone, beg_epochs = (
         os.path.join("model", model_name, str(15), "model-latest.save"),
@@ -114,11 +104,39 @@ if __name__ == "__main__":
         0,
     )  # comment this if need to load from milestone
 
-    model = DGCNNFilter(6, hidden_layers=[64, 128, 6])
+    # Select baseline network
+    if re.search("dgcnn", model_name) is not None:
+        model = DGCNNFilter(fin=6, hidden_layers=[64, 128, 6])
+        batch_size = 24 * ngpu  # bs depends on GPUs used
+    elif re.search("gat", model_name) is not None:
+        model = GATDenoiser(
+            fin=6,
+            hidden_layers=[
+                {"f": 16, "heads": 4},  # i.e. 64
+                {"f": 64, "heads": 2},  # i.e. 128
+                {"f": 6, "heads": 8, "concat": False, "negative_slope": 0.2}
+                # cancel activation at last layer
+            ],
+        )
+        batch_size = 40 * ngpu  # bs depends on GPUs used
+        
     if parallel and use_sbn:
         model = parallelize_model(model, device, gpu_ids, gpu_id)
     else:
         model = model.to(device)
+
+    dataset, test_dataset, train_loader, test_loader = get_data(
+        dataset_type,
+        data_path,
+        batch_size=batch_size,
+        samplePoints=samplePoints,
+        parallel=parallel,
+    )
+    # print(train_loader)
+
+    writer = SummaryWriter(comment=model_name)
+
+    
 
     # print(colorama.Fore.RED + "Using optimizer type %s" % optimizer_type)
     # if optimizer_type == "Adam":
@@ -145,7 +163,7 @@ if __name__ == "__main__":
     #     optimizer, T_max=100, last_epoch=beg_epochs
     # )
     optimizer, scheduler = get_optimizer(
-        model, optimizer_type, [], 0.002, 0.002, beg_epochs
+        model, optimizer_type, (), 0.002, 0.002, beg_epochs
     )
 
     if model_milestone is not None:
