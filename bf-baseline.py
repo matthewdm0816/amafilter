@@ -156,9 +156,9 @@ if __name__ == "__main__":
     """
     Naive BF Tests
     """
-    gpu_id = 0
+    gpu_id = 6
     # gpu_ids = [0, 1, 2, 7]
-    gpu_ids = [0, 1, 2, 3]
+    gpu_ids = [6, 7]
     ngpu = len(gpu_ids)
     batch_size = 512 * ngpu
     # os.environ['CUDA_VISIBLE_DEVICES'] = repr(gpu_ids)[1:-1]
@@ -174,7 +174,8 @@ if __name__ == "__main__":
         data_path = os.path.join("/data", "pkurei", pl_path)
     elif dataset_type == "MPEG":
         # pl_path = 'pku'
-        data_path = os.path.join("data-1.0")
+        dataset_name = "data-5.0"
+        data_path = os.path.join(dataset_name)
     print(colorama.Fore.RED + "Testing on dataset %s at %s" % (dataset_type, data_path))
 
     for path in (data_path,):
@@ -295,5 +296,5 @@ if __name__ == "__main__":
             "records": records,
         }
     )
-    with open("naive-baseline.json", "w") as f:
+    with open("naive-baseline-%s.json" % dataset_name, "w") as f:
         f.write(record_str)
