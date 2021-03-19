@@ -29,16 +29,61 @@
     - result: changed $X$ to $f_\phi(X)$ to filter => degenerates perf.
 21. Add flag to switch v2/v0 BFs, add argparsers
 22. Dynamic as graph connection => t as feature
+22. Relative postion as DGCNN?
 
 ### Comparisons
-| $\sigma$ | 1    | 5    | 10   |
-| -------- | ---- | ---- | ---- |
-| Original | 1    | 25   | 100  |
-| Plain BF | 0.30 | 8.76 |      |
-| AmaBF    | 0.13 | 0.50 |      |
-| DGCNN    |      | 0.74 |      |
-| GAT      |      | <1.0 |      |
+| $\sigma$      | 1    | 5     | 10   |
+| ------------- | ---- | ----- | ---- |
+| Original      | 1    | 25    | 100  |
+| Plain BF      | 0.30 | 8.76  |      |
+| AmaBF(w/ act) | 0.13 | 0.50  |      |
+| DGCNN         |      | 0.74  |      |
+| DGCNN(w/ act) |      |       |      |
+| GAT           |      | <0.93 |      |
+| GAT(w/ act)   |      | <0.80 |      |
 
+- All comparisons @ 100 epochs
+- w/ or w/o activation for GAT seems has no difference on denoising
 
+### Theory Backgrounds
 
+1. GATs
+   $$
+   \bold X^{l+1}=\sigma(||_k\bold D^{-1}_{W^k}\bold W^k\bold X^{l}\bold \Theta^k)\\
+   w_{ij}=\exp(f(\bold x'_i, \bold x'_j))
+   $$
 
+2. GCNs
+   $$
+   \bold X^{l+1}=\sigma(\bold D^{-1/2}_{W}\bold W\bold D^{-1/2}_{W}\bold X^{l}\bold \Theta)\\
+   \bold W=\bold A+\bold I
+   $$
+3. SGCs
+   $$
+   \bold X^{K}=\sigma((\bold D^{-1/2}_{W}\bold W\bold D^{-1/2}_{W})^K \bold X^{0} \bold \Theta)\\
+   \bold W=\bold A+\bold I
+   $$
+
+4. DGCNNs
+   $$
+   \bold X^{l+1}=\sigma(\bold W\bold X^{l}\bold \Theta)\\
+   w_{ij}=\exp(f(\bold x'_i||\bold x'_j-\bold x'_i)\approx f(\bold x'_i, \bold x'_j-\bold x'_i))
+   $$
+
+5. MoNet
+   $$
+   \bold X^{l+1}=\sigma(\bold D^{-1}_{A}\frac 1 K\sum_{k=[K]} \bold W^k\bold X^{l}\bold \Theta^k)\\
+   w_{ij}=\exp(-\frac 1 2 (\bold {e'}_{ij}^T\bold \Sigma^{-1}\bold {e'}_{ij}))\\
+   \bold {e'}_{ij} = \bold x_i - \bold x_j
+   $$
+
+6. AmaFilter(BF): activation-free
+   $$
+   \bold X^{l+1}=\bold D^{-1}_{W}\bold W\bold X^{l}\bold \Theta\\
+   w_{ij}=\exp(-\|\bold \phi(\bold x'_i)-\phi(\bold x'_j)\|^2)
+   $$
+
+### Future Directions
+
+1. Fuzzy
+2. Meta-Learning 
