@@ -132,8 +132,9 @@ def tensorinfo(t):
 
 
 def get_data(dataset_type, data_path, batch_size=32, samplePoints=1024, parallel=False):
-    from dataloader import ModelNet, ADataListLoader, MPEGDataset, MPEGTransform
+    from dataloader import  ADataListLoader, MPEGDataset, MPEGTransform
     from torch_geometric.data import Data, DataLoader, DataListLoader
+    from torch_geometric.datasets import ModelNet
 
     if dataset_type == "MN40":
         train_dataset = ModelNet(
@@ -230,6 +231,22 @@ def init_train(parallel, gpu_ids):
 
     return timestamp
 
+def parallelize_model(model, device, gpu_ids, gpu_id):
+    # parallelization load
+    # if parallel:
+    #     if use_sbn:
+    from torch_geometric.nn import DataParallel
+    try:
+        # fix sync-batchnorm
+        from sync_batchnorm import convert_model
+        model = convert_model(model)
+    except ModuleNotFoundError:
+        raise ModuleNotFoundError("Sync-BN plugin not found")
+    # NOTE: DataParallel call MUST after model definition completes
+    model = DataParallel(model, device_ids=gpu_ids, output_device=gpu_id).to(device)
+    # else:
+    #     model = model.to(device)
+    return model
 
 def get_model(
     dataset_type,
@@ -241,26 +258,17 @@ def get_model(
     gpu_id=0,
 ):
     from bf import AmaFilter
-    from torch_geometric.data import DataParallel
+    from torch_geometric.nn import DataParallel
 
     if dataset_type == "MN40":
         model = AmaFilter(3, 3, k=32)
     elif dataset_type == "MPEG":
         model = AmaFilter(6, 6, k=32, filter=bfilter)
         print(colorama.Fore.MAGENTA + "Using filter type %s" % bfilter.__name__)
-
-    # parallelization load
-    if parallel:
-        if use_sbn:
-            try:
-                # fix sync-batchnorm
-                from sync_batchnorm import convert_model
-
-                model = convert_model(model)
-            except ModuleNotFoundError:
-                raise ModuleNotFoundError("Sync-BN plugin not found")
-            # NOTE: DataParallel call MUST after model definition completes
-        model = DataParallel(model, device_ids=gpu_ids, output_device=gpu_id).to(device)
+    
+    if parallel and use_sbn:
+        model = parallelize_model(model, device, gpu_ids, gpu_id)
     else:
         model = model.to(device)
     return model
+

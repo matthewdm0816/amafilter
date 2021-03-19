@@ -57,14 +57,16 @@ assert dataset_type in ["MPEG", "MN40"]
 
 class DGCNNFilter(nn.Module):
     def __init__(self, fin, hidden_layers: List[int]):
+        super().__init__()
         self.fin = fin
         hidden_layers = [fin] + hidden_layers
         self.mlps = nn.ModuleList([MLP(2 * i, o) for i, o in layers(hidden_layers)])
         for i, o in layers(hidden_layers):
             sprint("Created layer (%d, %d)" % (i, o))
-        self.filters = nn.ModuleList(*[DynamicEdgeConv(mlp, k=32) for mlp in self.mlps])
+        self.filters = nn.ModuleList([DynamicEdgeConv(mlp, k=32) for mlp in self.mlps])
 
     def forward(self, data):
+        # print(data)
         target, batch, x = data.y, data.batch, data.x
         for i, filter in enumerate(self.filters):
             x = filter(x, batch=batch)
@@ -97,6 +99,7 @@ if __name__ == "__main__":
         samplePoints=samplePoints,
         parallel=parallel,
     )
+    print(train_loader)
 
     writer = SummaryWriter(comment=model_name)
 
@@ -112,12 +115,16 @@ if __name__ == "__main__":
     )  # comment this if need to load from milestone
 
     model = DGCNNFilter(6, hidden_layers=[64, 128, 6])
+    if parallel and use_sbn:
+        model = parallelize_model(model, device, gpu_ids, gpu_id)
+    else:
+        model = model.to(device)
+
     print(colorama.Fore.RED + "Using optimizer type %s" % optimizer_type)
     if optimizer_type == "Adam":
         optimizer = optim.Adam(
             [
                 {"params": model.parameters(), "initial_lr": 0.002},
-                # {"params": model.parameters(), "initial_lr": 0.002}
             ],
             lr=0.002,
             weight_decay=5e-4,
@@ -127,10 +134,7 @@ if __name__ == "__main__":
         # Using SGD Nesterov-accelerated with Momentum
         optimizer = optim.SGD(
             [
-                {
-                    "params": model.parameters(),
-                    "initial_lr": 0.002,
-                },
+                {"params": model.parameters(), "initial_lr": 0.002},
             ],
             lr=0.002,
             weight_decay=5e-4,
@@ -155,9 +159,9 @@ if __name__ == "__main__":
 
     for epoch in trange(beg_epochs, epochs + 1):
         train_mse, train_psnr, train_orig_psnr = train(
-            model, optimizer, scheduler, train_loader, epoch
+            model, optimizer, scheduler, train_loader, dataset_type, parallel, epoch
         )
-        eval_mse, eval_psnr, test_orig_psnr = evaluate(model, test_loader, epoch)
+        eval_mse, eval_psnr, test_orig_psnr = evaluate(model, test_loader, dataset_type, parallel, epoch)
 
         # save model for each <milestone_period> epochs (e.g. 10 rounds)
         if epoch % milestone_period == 0 and epoch != 0:

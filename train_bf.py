@@ -107,11 +107,11 @@ def process_batch(batch, parallel, dataset_type):
     return result_batch, orig_mse
 
 
-def train(model, optimizer, scheduler, loader, epoch: int):
+def train(model, optimizer, scheduler, loader, dataset_type, parallel: bool, epoch: int):
     """
     NOTE: Need DROP_LAST=TRUE, in case batch length is not uniform
     """
-    global dataset_type
+    # global dataset_type
     model.train()
 
     # show current lr
@@ -157,11 +157,11 @@ def train(model, optimizer, scheduler, loader, epoch: int):
     return total_mse, total_psnr, total_orig_psnr
 
 
-def evaluate(model, loader, epoch: int):
+def evaluate(model, loader, dataset_type, parallel:bool, epoch: int):
     """
     NOTE: Need DROP_LAST=TRUE, in case batch length is not uniform
     """
-    global dataset_type
+    # global dataset_type
     model.eval()
     total_psnr, total_mse, total_orig_psnr = 0, 0, 0
     with torch.no_grad():
@@ -439,9 +439,9 @@ if __name__ == "__main__":
 
     for epoch in trange(beg_epochs, epochs + 1):
         train_mse, train_psnr, train_orig_psnr = train(
-            model, optimizer, scheduler, train_loader, epoch
+            model, optimizer, scheduler, train_loader, dataset_type, parallel, epoch
         )
-        eval_mse, eval_psnr, test_orig_psnr = evaluate(model, test_loader, epoch)
+        eval_mse, eval_psnr, test_orig_psnr = evaluate(model, test_loader, dataset_type, parallel, epoch)
 
         # save model for each <milestone_period> epochs (e.g. 10 rounds)
         if epoch % milestone_period == 0 and epoch != 0:

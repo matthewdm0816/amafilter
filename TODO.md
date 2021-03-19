@@ -27,4 +27,13 @@
     - experiment using layer-specified learning rate
     - result: changed X to f_\phi(X) to filter => degenerates perf.
 20. Add flag to switch v2/v0 BFs
+21. Dynamic as graph connection => t as feature
+
+### Comparisons
+| $\sigma$ | 1    | 5     | 10   |
+| -------- | ---- | ----- | ---- |
+| Original | 1    | 25    | 100  |
+| Plain BF | 0.30 | 8.76  |      |
+| AmaBF    | 0.13 | 0.50  |      |
+| DGCNN    |      | <0.747 |      |
 
