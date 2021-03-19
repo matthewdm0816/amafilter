@@ -42,9 +42,10 @@ class GATDenoiser(nn.Module):
     ]
     """
 
-    def __init__(self, fin, hidden_layers: list):
+    def __init__(self, fin, hidden_layers: list, activation: bool=True):
         super().__init__()
         hidden_layers = [{"f": fin, "heads": 1}] + hidden_layers
+        self.has_activation = activation
         self.gats = nn.ModuleList(
             [
                 GATConv(
@@ -75,7 +76,8 @@ class GATDenoiser(nn.Module):
         for i, (filter, activation) in enumerate(zip(self.gats, self.activation)):
             edge_index = knn_graph(x, k=32, batch=batch, loop=False)
             x = filter(x, edge_index=edge_index)
-            x = activation(x)
+            if self.has_activation:
+                x = activation(x)
 
         loss = mse(x, target)
         return x, loss

@@ -57,20 +57,34 @@ assert dataset_type in ["MPEG", "MN40"]
 
 
 class DGCNNFilter(nn.Module):
-    def __init__(self, fin, hidden_layers: List[int]):
+    def __init__(self, fin, hidden_layers: List[int], activation: bool = True):
         super().__init__()
         self.fin = fin
         hidden_layers = [fin] + hidden_layers
+        self.has_activation = activation
         self.mlps = nn.ModuleList([MLP(2 * i, o) for i, o in layers(hidden_layers)])
         for i, o in layers(hidden_layers):
             sprint("Created layer (%d, %d)" % (i, o))
         self.filters = nn.ModuleList([DynamicEdgeConv(mlp, k=32) for mlp in self.mlps])
+        self.activation = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.LeakyReLU(negative_slope=0.2),
+                    nn.BatchNorm1d(o["f"] * o["heads"]),
+                )
+                if idx != len(hidden_layers) - 2
+                else nn.Identity()
+                for idx, (i, o) in enumerate(layers(hidden_layers))
+            ]
+        )
 
     def forward(self, data):
         # print(data)
         target, batch, x = data.y, data.batch, data.x
-        for i, filter in enumerate(self.filters):
+        for i, (filter, activation) in enumerate(zip(self.filters, self.activation)):
             x = filter(x, batch=batch)
+            if self.has_activation:
+                x = activation(x)
 
         loss = mse(x, target)
         return x, loss
@@ -119,7 +133,7 @@ if __name__ == "__main__":
             ],
         )
         batch_size = 40 * ngpu  # bs depends on GPUs used
-        
+
     if parallel and use_sbn:
         model = parallelize_model(model, device, gpu_ids, gpu_id)
     else:
@@ -135,8 +149,6 @@ if __name__ == "__main__":
     # print(train_loader)
 
     writer = SummaryWriter(comment=model_name)
-
-    
 
     # print(colorama.Fore.RED + "Using optimizer type %s" % optimizer_type)
     # if optimizer_type == "Adam":
