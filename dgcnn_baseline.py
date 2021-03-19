@@ -69,8 +69,8 @@ class DGCNNFilter(nn.Module):
         self.activation = nn.ModuleList(
             [
                 nn.Sequential(
-                    nn.LeakyReLU(negative_slope=0.2),
-                    nn.BatchNorm1d(o["f"] * o["heads"]),
+                    nn.ReLU(),
+                    nn.BatchNorm1d(o)
                 )
                 if idx != len(hidden_layers) - 2
                 else nn.Identity()
@@ -99,7 +99,7 @@ if __name__ == "__main__":
         pl_path = "modelnet40-1024"
         data_path = os.path.join("/data", "pkurei", pl_path)
     elif dataset_type == "MPEG":
-        model_name = "mpeg-gat-5.0sgd"
+        model_name = "mpeg-dgcnn-5.0sgd"
         model_path = os.path.join("model", model_name, str(timestamp))
         # pl_path = 'pku'
         data_path = os.path.join("data-5.0")
@@ -133,6 +133,8 @@ if __name__ == "__main__":
             ],
         )
         batch_size = 40 * ngpu  # bs depends on GPUs used
+    else:
+        raise NotImplementedError
 
     if parallel and use_sbn:
         model = parallelize_model(model, device, gpu_ids, gpu_id)
@@ -150,30 +152,6 @@ if __name__ == "__main__":
 
     writer = SummaryWriter(comment=model_name)
 
-    # print(colorama.Fore.RED + "Using optimizer type %s" % optimizer_type)
-    # if optimizer_type == "Adam":
-    #     optimizer = optim.Adam(
-    #         [
-    #             {"params": model.parameters(), "initial_lr": 0.002},
-    #         ],
-    #         lr=0.002,
-    #         weight_decay=5e-4,
-    #         betas=(0.9, 0.999),
-    #     )
-    # elif optimizer_type == "SGD":
-    #     # Using SGD Nesterov-accelerated with Momentum
-    #     optimizer = optim.SGD(
-    #         [
-    #             {"params": model.parameters(), "initial_lr": 0.002},
-    #         ],
-    #         lr=0.002,
-    #         weight_decay=5e-4,
-    #         momentum=0.9,
-    #         nesterov=True,
-    #     )
-    # scheduler = optim.lr_scheduler.CosineAnnealingLR(
-    #     optimizer, T_max=100, last_epoch=beg_epochs
-    # )
     optimizer, scheduler = get_optimizer(
         model, optimizer_type, (), 0.002, 0.002, beg_epochs
     )

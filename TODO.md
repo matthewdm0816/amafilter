@@ -32,18 +32,19 @@
 22. Relative postion as DGCNN?
 
 ### Comparisons
-| $\sigma$      | 1    | 5     | 10   |
-| ------------- | ---- | ----- | ---- |
-| Original      | 1    | 25    | 100  |
-| Plain BF      | 0.30 | 8.76  |      |
-| AmaBF(w/ act) | 0.13 | 0.50  |      |
-| DGCNN         |      | 0.74  |      |
-| DGCNN(w/ act) |      |       |      |
-| GAT           |      | <0.93 |      |
-| GAT(w/ act)   |      | <0.80 |      |
+| $\sigma$       | 1    | 5        | 10  |
+| -------------- | ---- | -------- | --- |
+| Original       | 1    | 25       | 100 |
+| Plain BF       | 0.30 | 8.76     |     |
+| AmaBF(w/o act) | 0.13 | 0.50     |     |
+| DGCNN(w/o act) |      | 0.74     |     |
+| DGCNN(w/ act)  |      |          |     |
+| GAT(w/o act)   |      | <0.93    |     |
+| GAT(w/ act)    |      | 0.75@290 |     |
 
 - All comparisons @ 100 epochs
 - w/ or w/o activation for GAT seems has no difference on denoising
+- On SGD+M/Nesterov: slightly better generalization compared to Adam
 
 ### Theory Backgrounds
 
