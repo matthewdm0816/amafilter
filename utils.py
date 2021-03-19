@@ -3,6 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 import torch_geometric as tg
+import colorama, json
+
+colorama.init(autoreset=True)
 
 
 def transform(samplePoints=2500, k=32):
@@ -126,3 +129,138 @@ def parallel_cuda(batch, device):
 
 def tensorinfo(t):
     return "%f, %f, %f" % (t.max().item(), t.median().item(), t.min().item())
+
+
+def get_data(dataset_type, data_path, batch_size=32, samplePoints=1024, parallel=False):
+    from dataloader import ModelNet, ADataListLoader, MPEGDataset, MPEGTransform
+    from torch_geometric.data import Data, DataLoader, DataListLoader
+
+    if dataset_type == "MN40":
+        train_dataset = ModelNet(
+            root=data_path,
+            name="40",
+            train=True,
+            pre_transform=transform(samplePoints=samplePoints),
+        )
+        test_dataset = ModelNet(
+            root=data_path,
+            name="40",
+            train=False,
+            pre_transform=transform(samplePoints=samplePoints),
+        )
+        if parallel:
+            train_loader = DataListLoader(
+                train_dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                drop_last=False,
+                num_workers=16,
+                pin_memory=True,
+            )
+            test_loader = DataListLoader(
+                test_dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                drop_last=False,
+                num_workers=16,
+                pin_memory=True,
+            )
+        else:
+            train_loader = DataLoader(
+                train_dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                drop_last=False,
+                num_workers=16,
+                pin_memory=True,
+            )
+            test_loader = DataLoader(
+                test_dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                drop_last=False,
+                num_workers=16,
+                pin_memory=True,
+            )
+        return train_dataset, test_dataset, train_loader, test_loader
+    elif dataset_type == "MPEG":
+        dataset = MPEGDataset(root=data_path, pre_transform=MPEGTransform)
+        if parallel:
+            train_loader = ADataListLoader(
+                dataset,
+                training=True,
+                test_classes=[0, 1],
+                batch_size=batch_size,
+                shuffle=True,
+            )
+            test_loader = ADataListLoader(
+                dataset,
+                training=False,
+                test_classes=[0, 1],
+                batch_size=batch_size,
+                shuffle=True,
+            )
+        else:
+            raise NotImplementedError
+        return dataset, dataset, train_loader, test_loader
+
+
+def init_train(parallel, gpu_ids):
+    torch.backends.cudnn.benchmark = True
+    print(
+        colorama.Fore.MAGENTA
+        + (
+            "Running in Single-GPU mode"
+            if not parallel
+            else "Running in Multiple-GPU mode with GPU {}".format(gpu_ids)
+        )
+    )
+
+    # load timestamp
+    try:
+        with open("timestamp.json", "r") as f:
+            timestamp = json.load(f)["timestamp"] + 1
+    except FileNotFoundError:
+        # init timestamp
+        timestamp = 1
+    finally:
+        # save timestamp
+        with open("timestamp.json", "w") as f:
+            json.dump({"timestamp": timestamp}, f)
+
+    return timestamp
+
+
+def get_model(
+    dataset_type,
+    bfilter,
+    device,
+    parallel=False,
+    use_sbn: bool = True,
+    gpu_ids=(0,),
+    gpu_id=0,
+):
+    from bf import AmaFilter
+    from torch_geometric.data import DataParallel
+
+    if dataset_type == "MN40":
+        model = AmaFilter(3, 3, k=32)
+    elif dataset_type == "MPEG":
+        model = AmaFilter(6, 6, k=32, filter=bfilter)
+        print(colorama.Fore.MAGENTA + "Using filter type %s" % bfilter.__name__)
+
+    # parallelization load
+    if parallel:
+        if use_sbn:
+            try:
+                # fix sync-batchnorm
+                from sync_batchnorm import convert_model
+
+                model = convert_model(model)
+            except ModuleNotFoundError:
+                raise ModuleNotFoundError("Sync-BN plugin not found")
+            # NOTE: DataParallel call MUST after model definition completes
+        model = DataParallel(model, device_ids=gpu_ids, output_device=gpu_id).to(device)
+    else:
+        model = model.to(device)
+    return model
