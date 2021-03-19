@@ -59,7 +59,7 @@ class MLP(nn.Module):
 
 class Weight(nn.Module):
     def __init__(self, fin, embedding="linear", collate="gaussian", **kwargs):
-        """
+        r"""
         embedding:
             linear ~ Malahanobis Distance
             MLP
@@ -85,7 +85,7 @@ class Weight(nn.Module):
         except KeyError:
             fout = fin
         self.fout = fout
-        self.embedding = embedding
+        # self.embedding = embedding
         assert embedding in ["linear", "MLP"]
         if embedding == "linear":
             self.embedding = nn.Linear(fin, fout)
@@ -216,7 +216,7 @@ class Embedding(nn.Module):
         except KeyError:
             fout = fin
         self.fout = fout
-        self.embedding = embedding
+        # self.embedding = embedding
         assert embedding in ["linear", "MLP"]
         if embedding == "linear":
             self.embedding = nn.Linear(fin, fout)
@@ -283,15 +283,15 @@ class BilateralFilterv2(MessagePassing):
         edge_index ~ 2 * E
         """
         x = self.fproj(x)  # => N * FOUT
-        x = self.embedding(x) # => N * FOUT through embedding layer
+        e = self.embedding(x) # => N * FOUT through embedding layer
 
         n_nodes = x.size(0)
 
         # Compute edge weight
         row, col = edge_index
-        x_i, x_j = x[row], x[col]
+        e_i, e_j = e[row], e[col]
         # edge_weight: E * FOUT
-        edge_weight = self._edge_weight(x_i, x_j)
+        edge_weight = self._edge_weight(e_i, e_j)
 
         # Compute normalization W = D^{-1}W ~ Random Walk Laplacian
         # TODO: Variable Norm, Sym/None

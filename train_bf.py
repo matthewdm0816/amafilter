@@ -221,7 +221,7 @@ if __name__ == "__main__":
         pl_path = "modelnet40-1024"
         data_path = os.path.join("/data", "pkurei", pl_path)
     elif dataset_type == "MPEG":
-        model_name = "mpeg-bf-5.0v2sgd"
+        model_name = "mpeg-bf-5.0v3sgd"
         model_path = os.path.join("model", model_name, str(timestamp))
         # pl_path = 'pku'
         data_path = os.path.join("data-5.0")
@@ -334,10 +334,11 @@ if __name__ == "__main__":
     else:
         model = model.to(device)
 
+    # show named modules
     # for name, param in model.named_parameters():
     #     print(name)
-
     # exit(0)
+
     # optimizer & scheduler
     print(colorama.Fore.RED + "Using optimizer type %s" % optimizer_type)
     if optimizer_type == "Adam":
@@ -387,12 +388,6 @@ if __name__ == "__main__":
                 ),
             )
         )
-        # print("===============================")
-        # print(params)
-        # print("===============================")
-        # print(base_params)
-        # print("===============================")
-        # exit(0)
         optimizer = optim.SGD(
             [
                 {

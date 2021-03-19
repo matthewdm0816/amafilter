@@ -257,17 +257,7 @@ def MPEGTransform(data, func=whiten):
     for key in data.keys:
         # process all tensors
         if torch.is_tensor(data[key]) and key != 'kernel_z':
-            # print(key)
-            # assert not torch.any(torch.isnan(data[key])), "NaN detected before!"
-            # orig_data = data[key]
             data[key] = func(data[key])
-            # try:
-            #     assert not torch.any(torch.isnan(data[key])), "NaN detected after!"
-            # except AssertionError:
-            #     sprint(tensorinfo(orig_data))
-            #     sprint(orig_data.mean(dim=0))
-            #     sprint(orig_data.std(dim=0))
-            #     assert False
     return data
 
 
