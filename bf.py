@@ -141,6 +141,11 @@ class BilateralFilter(MessagePassing):
         self.weight = Weight(
             fout, embedding="MLP", collate="gaussian", hidden_layers=[128, fout]
         )
+        sprint(
+            "Created BilateralFilter with {:d} => {:d}, hidden: {}".format(
+                fin, fout, [128]
+            )
+        )
 
     def _weighted_degree(self, edge_index, edge_weight, num_nodes):
         """
@@ -251,6 +256,11 @@ class BilateralFilterv2(MessagePassing):
             self.out = module_wrapper(lambda x: torch.exp(-(x)))
         elif collate == "fractional":
             self.out = module_wrapper(lambda x: (x) ** (-2))
+        sprint(
+            "Created BilateralFilterv2 {:d} => {:d}, hidden: {}".format(
+                fin, fout, [128]
+            )
+        )
 
     def _weighted_degree(self, edge_index, edge_weight, num_nodes):
         """
@@ -283,7 +293,7 @@ class BilateralFilterv2(MessagePassing):
         edge_index ~ 2 * E
         """
         x = self.fproj(x)  # => N * FOUT
-        e = self.embedding(x) # => N * FOUT through embedding layer
+        e = self.embedding(x)  # => N * FOUT through embedding layer
 
         n_nodes = x.size(0)
 
@@ -311,14 +321,33 @@ class AmaFilter(nn.Module):
         - Bottleneck?
     """
 
-    def __init__(self, fin=6, fout=6, k=16, filter=BilateralFilter):
+    def __init__(
+        self, fin=6, fout=6, k=16, filter=BilateralFilter, activation: bool = True
+    ):
         super().__init__()
         self.fin, self.fout, self.k = fin, fout, k
+        hidden_layers = [fin, 64 + fin, 128 + 64 + fin, fout]
+        # total = 0
+        # for idx, h in enumerate(hidden_layers):
+        #     total += h
+        #     hidden_layers[idx] = total
         self.filters = nn.ModuleList(
             [
                 filter(fin, 64),
                 filter(64 + fin, 128),
                 filter(64 + fin + 128, fout),
+            ]
+        )
+        self.has_activation = activation
+        self.activation = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.PReLU(),
+                    nn.BatchNorm1d(o),
+                )
+                if idx != len(hidden_layers) - 2
+                else nn.Identity()
+                for idx, (i, o) in enumerate(layers(hidden_layers))
             ]
         )
 
@@ -331,13 +360,15 @@ class AmaFilter(nn.Module):
         # print(data)
         target, batch, x = data.y, data.batch, data.x
 
-        for i, filter in enumerate(self.filters):
+        for i, (filter, act) in enumerate(zip(self.filters, self.activation)):
             # dynamic graph? yes!
             edge_index = knn_graph(x, k=self.k, batch=batch, loop=False)
             # print(edge_index.shape)
             # NOTE: denselinks added
             y = filter(x, edge_index)
             x = torch.cat((x, y), dim=-1) if i != self.nfilters - 1 else y
+            if self.has_activation:
+                x = act(x)
         loss = mse(x, target)
         return x, loss
 

@@ -132,7 +132,7 @@ def tensorinfo(t):
 
 
 def get_data(dataset_type, data_path, batch_size=32, samplePoints=1024, parallel=False):
-    from dataloader import  ADataListLoader, MPEGDataset, MPEGTransform
+    from dataloader import ADataListLoader, MPEGDataset, MPEGTransform
     from torch_geometric.data import Data, DataLoader, DataListLoader
     from torch_geometric.datasets import ModelNet
 
@@ -231,14 +231,17 @@ def init_train(parallel, gpu_ids):
 
     return timestamp
 
+
 def parallelize_model(model, device, gpu_ids, gpu_id):
     # parallelization load
     # if parallel:
     #     if use_sbn:
     from torch_geometric.nn import DataParallel
+
     try:
         # fix sync-batchnorm
         from sync_batchnorm import convert_model
+
         model = convert_model(model)
     except ModuleNotFoundError:
         raise ModuleNotFoundError("Sync-BN plugin not found")
@@ -248,11 +251,13 @@ def parallelize_model(model, device, gpu_ids, gpu_id):
     #     model = model.to(device)
     return model
 
+
 def get_model(
-    dataset_type,
+    dataset_type: str,
     bfilter,
     device,
-    parallel=False,
+    activation: bool = True,
+    parallel: bool = False,
     use_sbn: bool = True,
     gpu_ids=(0,),
     gpu_id=0,
@@ -261,19 +266,22 @@ def get_model(
     from torch_geometric.nn import DataParallel
 
     if dataset_type == "MN40":
-        model = AmaFilter(3, 3, k=32)
+        model = AmaFilter(3, 3, k=32, activation=activation)
     elif dataset_type == "MPEG":
-        model = AmaFilter(6, 6, k=32, filter=bfilter)
+        model = AmaFilter(6, 6, k=32, filter=bfilter, activation=activation)
         print(colorama.Fore.MAGENTA + "Using filter type %s" % bfilter.__name__)
-    
+
     if parallel and use_sbn:
         model = parallelize_model(model, device, gpu_ids, gpu_id)
     else:
         model = model.to(device)
     return model
 
+
 def get_optimizer(model, optimizer_type, my_list, lr, alt_lr, beg_epochs):
     from torch import optim
+    import re
+
     print(colorama.Fore.RED + "Using optimizer type %s" % optimizer_type)
     if optimizer_type == "Adam":
         optimizer = optim.Adam(

@@ -203,7 +203,7 @@ if __name__ == "__main__":
         pl_path = "modelnet40-1024"
         data_path = os.path.join("/data", "pkurei", pl_path)
     elif dataset_type == "MPEG":
-        model_name = "mpeg-bf-5.0v3sgd"
+        model_name = "mpeg-bf-5.0v3sgd+act"
         model_path = os.path.join("model", model_name, str(timestamp))
         # pl_path = 'pku'
         data_path = os.path.join("data-5.0")
@@ -238,6 +238,7 @@ if __name__ == "__main__":
         dataset_type,
         bfilter,
         device,
+        activation=True,
         parallel=parallel,
         use_sbn=True,
         gpu_ids=gpu_ids,
@@ -258,73 +259,6 @@ if __name__ == "__main__":
     optimizer, scheduler = get_optimizer(
         model, optimizer_type, my_list, 0.002, 0.002 * 10, beg_epochs
     )
-    # print(colorama.Fore.RED + "Using optimizer type %s" % optimizer_type)
-    # if optimizer_type == "Adam":
-    #     optimizer = optim.Adam(
-    #         [
-    #             {"params": model.parameters(), "initial_lr": 0.002},
-    #             # {"params": model.parameters(), "initial_lr": 0.002}
-    #         ],
-    #         lr=0.002,
-    #         weight_decay=5e-4,
-    #         betas=(0.9, 0.999),
-    #     )
-    # elif optimizer_type == "SGD":
-    #     # Using SGD Nesterov-accelerated with Momentum
-    #     # Selective lr adjustment
-    #     my_list = [
-    #         "module.filters.0.embedding",
-    #         "module.filters.1.embedding",
-    #         "module.filters.2.embedding",
-    #     ]
-    #     params = list(
-    #         map(
-    #             lambda x: x[1],
-    #             list(
-    #                 filter(
-    #                     lambda kv: any(
-    #                         [
-    #                             re.search(pattern, kv[0]) is not None
-    #                             for pattern in my_list
-    #                         ]
-    #                     ),
-    #                     model.named_parameters(),
-    #                 )
-    #             ),
-    #         )
-    #     )
-    #     base_params = list(
-    #         map(
-    #             lambda x: x[1],
-    #             list(
-    #                 filter(
-    #                     lambda kv: all(
-    #                         [re.search(pattern, kv[0]) is None for pattern in my_list]
-    #                     ),
-    #                     model.named_parameters(),
-    #                 )
-    #             ),
-    #         )
-    #     )
-    #     optimizer = optim.SGD(
-    #         [
-    #             {
-    #                 "params": params,
-    #                 "initial_lr": 0.002 * 10,
-    #             },
-    #             {
-    #                 "params": base_params,
-    #                 "initial_lr": 0.002,
-    #             },
-    #         ],
-    #         lr=0.002,
-    #         weight_decay=5e-4,
-    #         momentum=0.9,
-    #         nesterov=True,
-    #     )
-    # scheduler = optim.lr_scheduler.CosineAnnealingLR(
-    #     optimizer, T_max=100, last_epoch=beg_epochs
-    # )
 
     if model_milestone is not None:
         load_model(model, optimizer, model_milestone, optim_milestone, beg_epochs)
