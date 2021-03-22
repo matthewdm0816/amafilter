@@ -205,7 +205,15 @@ if __name__ == "__main__":
     # parse args
     parser = ArgumentParser()
     # ...TODO
+    parser.add_argument("-o", "--optimizer", type=str, help="Specify optimizer kind", nargs="?", const="SGD")
+    parser.add_argument("-d", "--dataset", type=str, help="Specify dataset")
+    parser.add_argument("-p", "--path", type=str, help="Specify dataset path")
+    parser.add_argument("-b", "--batchsize", type=int, help="Batchsize/GPU of training")
+    parser.add_argument("-t", "--total", type=int, help="Total epochs", nargs="?", const=500)
+    parser.add_argument("-m", "--model", type=str, help="Specify model type")
+    parser.add_argument("--gpus", type=int, nargs="+")
     args = parser.parse_args()
+    optimizer_type, dataset_type, gpu_ids, gpu_id, ngpu, parallel, epochs, model_name, data_path = parse_config(args)
 
     # get training IDs
     timestamp = init_train(parallel, gpu_ids)

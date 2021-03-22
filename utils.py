@@ -350,3 +350,17 @@ def get_optimizer(model, optimizer_type, my_list, lr, alt_lr, beg_epochs):
         optimizer, T_max=100, last_epoch=beg_epochs
     )
     return optimizer, scheduler
+
+
+def parse_config(args):
+    return (
+        args.optimizer,
+        args.dataset,
+        args.gpus,
+        args.gpus[0],
+        len(args.gpus),  # ngpu
+        len(args.gpus) > 1,  # parallel
+        args.total,
+        args.model,
+        args.path,
+    )
