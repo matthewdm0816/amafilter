@@ -11,7 +11,7 @@
 13. Add attention? 
 14. Patch aggregation (and test)
 15. MAML scheme? meta-train/test on several train labels to acquire few-shot learning
-17. Add graph reg. term, i.e. $\tau x^T L x$
+17. ~~Add graph reg. term, i.e. $\tau x^T L x$~~
 18. Try different layer stucture
 19. Try multiple $W_{ij}$(i.e. edge weight) type
 
@@ -19,7 +19,11 @@
 22. Dynamic as graph connection => t as feature
 23. Adversarial noise generator
 24. Large PC eval test
-25. Add MoNet baseline
+25. ~~Add MoNet baseline~~
+   - Need for test
+26. PCA+ICA baseline
+27. Baselines in paper
+28. Manifold-Manifold distance as loss
 
 ### Future Directions
 
@@ -30,16 +34,17 @@
 
 
 ### Comparisons
-| $\sigma$       | 1    | 5         | 10     |
-| -------------- | ---- | --------- | ------ |
-| Original       | 1    | 25        | 100    |
-| Plain BF       | 0.30 | 8.76      |        |
-| AmaBF(w/o act) | 0.13 | 0.50      |        |
-| AmaBF(w/ act)  | 0.13 | 0.425@340 | <0.560 |
-| DGCNN(w/o act) |      | 0.74      |        |
-| DGCNN(w/ act)  |      | 0.731@370 |        |
-| GAT(w/o act)   |      | <0.93     |        |
-| GAT(w/ act)    |      | 0.75@290  |        |
+| $\sigma$              | 1    | 5         | 10        |
+| --------------------- | ---- | --------- | --------- |
+| Original              | 1    | 25        | 100       |
+| Plain BF              | 0.30 | 8.76      |           |
+| AmaBF(w/o act)        | 0.13 | 0.50      |           |
+| AmaBF(w/ act)         | 0.13 | 0.425@340 | <0.543@50 |
+| AmaBF(w/ act+g. reg.) |      | 0.500@10  |           |
+| DGCNN(w/o act)        |      | 0.74      |           |
+| DGCNN(w/ act)         |      | 0.731@370 |           |
+| GAT(w/o act)          |      | <0.93     |           |
+| GAT(w/ act)           |      | 0.75@290  |           |
 
 - All comparisons @ 100 epochs
 - w/ or w/o activation for GAT seems has no difference on denoising
