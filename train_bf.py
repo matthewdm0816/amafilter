@@ -135,14 +135,20 @@ def train(
 
         orig_psnr = mse_to_psnr(orig_mse)
         model.zero_grad()
-        out, loss = model(batch)
+        out, *loss = model(batch)
+        # compatibility to no mse out nets
+        if len(loss) == 2:
+            loss, mse_loss = loss
+        elif len(loss) == 1:
+            loss, mse_loss = loss[0], loss[0]
         loss = loss.mean()
+        mse_loss = mse_loss.mean()
         # print(out.shape, loss.shape)
 
-        psnr_loss = mse_to_psnr(loss)
+        psnr_loss = mse_to_psnr(mse_loss)
         # total_orig_mse = orig_mse.detach().mean
         total_psnr += psnr_loss.detach().item()
-        total_mse += loss.detach().item()
+        total_mse += mse_loss.detach().item()
         total_orig_psnr += orig_psnr.detach().item()
 
         loss.backward()
@@ -151,10 +157,11 @@ def train(
         if i % 10 == 0:
             print(
                 colorama.Fore.MAGENTA
-                + "[%d/%d]MSE: %.3f, MSE-ORIG: %.3f, PSNR: %.3f, PSNR-ORIG: %.3f"
+                + "[%d/%d]MSE: %.3f, LOSS: %.3f, MSE-ORIG: %.3f, PSNR: %.3f, PSNR-ORIG: %.3f"
                 % (
                     epoch,
                     i,
+                    mse_loss.detach().item(),
                     loss.detach().item(),
                     orig_mse.detach().item(),
                     psnr_loss.detach().item(),
@@ -181,14 +188,15 @@ def evaluate(model, loader, dataset_type, parallel: bool, epoch: int):
             batch, orig_mse = process_batch(batch, parallel, dataset_type)
 
             orig_psnr = mse_to_psnr(orig_mse)
-            out, loss = model(batch)
+            out, loss, mse_loss = model(batch)
             loss = loss.mean()
+            mse_loss = mse_loss.mean()
 
             # loss = mse(out, reals)
-            psnr_loss = mse_to_psnr(loss)
+            psnr_loss = mse_to_psnr(mse_loss)
             total_orig_psnr += orig_psnr.detach().item()
             total_psnr += psnr_loss.detach().item()
-            total_mse += loss.detach().item()
+            total_mse += mse_loss.detach().item()
 
     total_mse /= len(loader)
     total_psnr /= len(loader)
@@ -212,8 +220,9 @@ if __name__ == "__main__":
     parser.add_argument("-t", "--total", type=int, help="Total epochs", nargs="?", const=500)
     parser.add_argument("-m", "--model", type=str, help="Specify model type")
     parser.add_argument("--gpus", type=int, nargs="+")
+    parser.add_argument("-r", "--regularization", type=float, help="Specify graph regularization strength, 0 stands for none", nargs="?", const=0.)
     args = parser.parse_args()
-    optimizer_type, dataset_type, gpu_ids, gpu_id, ngpu, parallel, epochs, model_name, data_path = parse_config(args)
+    optimizer_type, dataset_type, gpu_ids, gpu_id, ngpu, parallel, epochs, model_name, data_path, regularization = parse_config(args)
 
     # get training IDs
     timestamp = init_train(parallel, gpu_ids)
@@ -221,15 +230,15 @@ if __name__ == "__main__":
     # model and data path
     print(colorama.Fore.RED + "Training on dataset %s" % dataset_type)
     if dataset_type == "MN40":
-        model_name = "modelnet40-bf-64-128"
+        # model_name = "modelnet40-bf-64-128"
         model_path = os.path.join("model", model_name, str(timestamp))
-        pl_path = "modelnet40-1024"
-        data_path = os.path.join("/data", "pkurei", pl_path)
+        # pl_path = "modelnet40-1024"
+        # data_path = os.path.join("/data", "pkurei", pl_path)
     elif dataset_type == "MPEG":
-        model_name = "mpeg-bf-10.0v3sgd+act"
+        # model_name = "mpeg-bf-10.0v3sgd+act"
         model_path = os.path.join("model", model_name, str(timestamp))
         # pl_path = 'pku'
-        data_path = os.path.join("data-10.0")
+        # data_path = os.path.join("data-10.0")
 
     for path in (data_path, model_path):
         check_dir(path, color=colorama.Fore.CYAN)
@@ -266,6 +275,7 @@ if __name__ == "__main__":
         use_sbn=True,
         gpu_ids=gpu_ids,
         gpu_id=gpu_id,
+        reg=regularization
     )
 
     # show named modules

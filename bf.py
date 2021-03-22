@@ -312,6 +312,39 @@ class BilateralFilterv2(MessagePassing):
         return self.propagate(edge_index, x=x, norm=norm, edge_weight=edge_weight)
 
 
+class GraphRegularizer(MessagePassing):
+    def __init__(self):
+        super().__init__(aggr="add")
+
+    def message(self, x_i, x_j, edge_weight):
+        r"""
+        x_i, x_j ~ [E, FIN]
+        edge_weight ~ [E, 1]
+        """
+        # batch outer prod.
+        xdim = x_i.shape[-1] # i.e. FIN
+        res = torch.einsum("bi,bj->bij", x_i, x_j)
+        # print(res.shape)
+        return edge_weight.view(-1, 1) * res.view(-1, xdim * xdim)
+
+    def forward(self, x, k, edge_index=None, batch=None):
+        r"""
+        Calculate graph regularization term
+        $R=||X^T L X||_F$
+        """
+        num_nodes = x.shape[-2]
+        xdim = x.shape[-1]
+        if edge_index is None:
+            edge_index = knn_graph(x, k=k, batch=batch, loop=False)
+        lap_index, lap_val = get_laplacian(
+            edge_index, normalization="rw", num_nodes=num_nodes
+        )
+        res = self.propagate(edge_index=lap_index, x=x, edge_weight=lap_val)
+        # print(res.shape)  # [B, F * F]
+        # Frobenius Norm (intrinstically same)
+        return (torch.norm(res, dim=-1, p="fro") ** 2).mean()
+
+
 class AmaFilter(nn.Module):
     """
     Combine BFs into denoise module
@@ -322,7 +355,13 @@ class AmaFilter(nn.Module):
     """
 
     def __init__(
-        self, fin=6, fout=6, k=16, filter=BilateralFilter, activation: bool = True
+        self,
+        fin=6,
+        fout=6,
+        k=16,
+        filter=BilateralFilter,
+        activation: bool = True,
+        reg: float = 0.,
     ):
         super().__init__()
         self.fin, self.fout, self.k = fin, fout, k
@@ -352,6 +391,12 @@ class AmaFilter(nn.Module):
         )
 
         self.nfilters = len(self.filters)
+        if reg >= 1e-6: # non-zero G. Reg.
+            self.reg = GraphRegularizer()
+            self.reg_coeff = reg
+            print(colorama.Fore.GREEN + 'Using reg={:.1E}'.format(reg))
+        else:
+            self.reg = None
 
     def forward(self, data):
         r"""
@@ -370,7 +415,12 @@ class AmaFilter(nn.Module):
             if self.has_activation:
                 x = act(x)
         loss = mse(x, target)
-        return x, loss
+        mse_loss = loss
+        if self.reg is not None:
+            reg_loss = self.reg(x, k=self.k, batch=batch) * self.reg_coeff
+        else:
+            reg_loss = torch.tensor([0.])
+        return x, reg_loss + loss, loss
 
 
 if __name__ == "__main__":

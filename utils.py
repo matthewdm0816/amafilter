@@ -261,14 +261,19 @@ def get_model(
     use_sbn: bool = True,
     gpu_ids=(0,),
     gpu_id=0,
+    reg: float = 0.,
 ):
     from bf import AmaFilter
     from torch_geometric.nn import DataParallel
 
     if dataset_type == "MN40":
-        model = AmaFilter(3, 3, k=32, activation=activation)
+        model = AmaFilter(
+            3, 3, k=32, activation=activation, filter=bfilter, reg=reg
+        )
     elif dataset_type == "MPEG":
-        model = AmaFilter(6, 6, k=32, filter=bfilter, activation=activation)
+        model = AmaFilter(
+            6, 6, k=32, filter=bfilter, activation=activation, reg=reg
+        )
         print(colorama.Fore.MAGENTA + "Using filter type %s" % bfilter.__name__)
 
     if parallel and use_sbn:
@@ -363,4 +368,5 @@ def parse_config(args):
         args.total,
         args.model,
         args.path,
+        args.regularization
     )
