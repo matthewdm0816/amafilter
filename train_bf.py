@@ -25,12 +25,21 @@ from tqdm import *
 import numpy as np
 import pretty_errors
 from pprint import pprint
-
+from argparse import ArgumentParser
 from torch_geometric.nn import DataParallel
 from torch_geometric.data import DataListLoader, DataLoader
 from torch_geometric.datasets import ModelNet
 import torch
 import torch.optim as optim
+
+# limit CPU usage
+torch.set_num_threads(8)
+torch.set_num_interop_threads(8)
+print(
+    colorama.Fore.GREEN
+    + "Using %d/%d cores/threads of CPU"
+    % (torch.get_num_threads(), torch.get_num_interop_threads())
+)
 
 from bf import AmaFilter, BilateralFilterv2, BilateralFilter
 from dataloader import MPEGDataset, ADataListLoader, MPEGTransform
@@ -193,6 +202,12 @@ def evaluate(model, loader, dataset_type, parallel: bool, epoch: int):
 
 
 if __name__ == "__main__":
+    # parse args
+    parser = ArgumentParser()
+    # ...TODO
+    args = parser.parse_args()
+
+    # get training IDs
     timestamp = init_train(parallel, gpu_ids)
 
     # model and data path
@@ -203,10 +218,10 @@ if __name__ == "__main__":
         pl_path = "modelnet40-1024"
         data_path = os.path.join("/data", "pkurei", pl_path)
     elif dataset_type == "MPEG":
-        model_name = "mpeg-bf-5.0v3sgd+act"
+        model_name = "mpeg-bf-10.0v3sgd+act"
         model_path = os.path.join("model", model_name, str(timestamp))
         # pl_path = 'pku'
-        data_path = os.path.join("data-5.0")
+        data_path = os.path.join("data-10.0")
 
     for path in (data_path, model_path):
         check_dir(path, color=colorama.Fore.CYAN)

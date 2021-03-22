@@ -6,7 +6,14 @@ from torch import optim
 
 # from torchsummary import summary
 import torch_geometric.nn as tgnn
-from torch_geometric.nn import GCNConv, SGConv, MessagePassing, knn_graph, DataParallel
+from torch_geometric.nn import (
+    GCNConv,
+    SGConv,
+    MessagePassing,
+    knn_graph,
+    DataParallel,
+    GMMConv,
+)
 import torch_geometric as tg
 from torch_geometric.datasets import ModelNet
 from torch_geometric.data import DataLoader, DataListLoader
@@ -30,6 +37,48 @@ from dataloader import ADataListLoader, MPEGDataset, MPEGTransform
 from bf import MLP
 
 
+class BaseDenoiser(nn.Module):
+    r"""
+    Generic Base Denoiset Architecture
+    x=>FILTER=>ACTIVATION(if not output layer)=>...=>y
+    """
+    def __init__(self, fin, hidden_layers, activation: bool = True):
+        super().__init__()
+        self.fin, self.hidden_layers = fin, self.process_fin(fin) + hidden_layers
+        self.filters = nn.ModuleList(
+            [self.get_layer(i, o) for i, o in layers(hidden_layers)]
+        )
+        self.activation = nn.ModuleList(
+            [
+                self.get_activation(i, o)
+                if idx != len(hidden_layers) - 2
+                else nn.Identity()
+                for idx, (i, o) in enumerate(layers(hidden_layers))
+            ]
+        )
+
+    def get_layer(self, i, o):
+        raise NotImplementedError
+
+    def get_activation(self, i, o):
+        raise NotImplementedError
+
+    def process_fin(self, fin):
+        return NotImplementedError
+
+    def forward(self, data):
+        # print(data)
+        target, batch, x = data.y, data.batch, data.x
+        for i, (filter, activation) in enumerate(zip(self.filters, self.activation)):
+            edge_index = knn_graph(x, k=32, batch=batch, loop=False)
+            x = filter(x, edge_index=edge_index)
+            if self.has_activation:
+                x = activation(x)
+
+        loss = mse(x, target)
+        return x, loss
+
+
 class GATDenoiser(nn.Module):
     r"""
     Baseline GAT as denoiser
@@ -42,7 +91,7 @@ class GATDenoiser(nn.Module):
     ]
     """
 
-    def __init__(self, fin, hidden_layers: list, activation: bool=True):
+    def __init__(self, fin, hidden_layers: list, activation: bool = True):
         super().__init__()
         hidden_layers = [{"f": fin, "heads": 1}] + hidden_layers
         self.has_activation = activation
@@ -65,7 +114,9 @@ class GATDenoiser(nn.Module):
                 nn.Sequential(
                     nn.LeakyReLU(negative_slope=0.2),
                     nn.BatchNorm1d(o["f"] * o["heads"]),
-                ) if idx != len(hidden_layers) - 2 else nn.Identity()
+                )
+                if idx != len(hidden_layers) - 2
+                else nn.Identity()
                 for idx, (i, o) in enumerate(layers(hidden_layers))
             ]
         )
@@ -81,3 +132,26 @@ class GATDenoiser(nn.Module):
 
         loss = mse(x, target)
         return x, loss
+
+
+class MoNetDenoiser(BaseDenoiser):
+    def __init__(
+        self, fin, hidden_layers, activation: bool = True, kernel_size: int = 8, separate_gaussians: bool = True
+    ):
+        self.kernel_size = kernel_size
+        self.separate_gaussians=separate_gaussians
+        super().__init__(fin, hidden_layers, activation=activation)
+
+    def get_activation(self, i, o):
+        return nn.Sequential(
+            nn.LeakyReLU(negative_slope=0.2),
+            nn.BatchNorm1d(o["f"] * o["heads"]),
+        )
+
+    def get_layer(self, i, o):
+        return GMMConv(
+            in_channels=i, out_channels=0, dim=i, kernel_size=self.kernel_size, separate_gaussians=self.separate_gaussians
+        )
+    
+    def process_fin(self, fin):
+        return [fin]

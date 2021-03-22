@@ -1,15 +1,9 @@
 ### Bilateral Filter Training TODOs 
-1. ~~Test on modelnet40~~
-2. ~~Implement on MPEG large dataset~~
-3. ~~Implement parallel training~~
-4. Learn displacement vector rather than filtered position
-5. ~~Calculate Std. Dev. => Impl. 10-30 std. jitter~~
+1. Learn displacement vector rather than filtered position
 6. Use specific channels for loss calc. (i.e. color only)
 7. Impl. further benchmark metrics
 8. Try alternative optimizers(esp. SGD)
     - Tried: SGD with M+Nesterov
-9.  ~~Why MSE mismatch? :NaN data!~~
-10. ~~Smaller/faster model~~(See 19)
 11. Re-generate dataset
     - ~~How to reduce number of patches to acceptable amount: take 10 patches~~
     - FPS might be clustering in point clound sequence
@@ -20,27 +14,32 @@
 17. Add graph reg. term, i.e. $\tau x^T L x$
 18. Try different layer stucture
 19. Try multiple $W_{ij}$(i.e. edge weight) type
-20. ~~Move embedding layer into BF(i.e. reduce repeated node embedding computation)(by make an alternative Weight)~~
-    - ~~Need testing~~
-    - Why the performance is worse? same pipeline
-    - increase of batchsize? 32->64(8 on each gpu) does not degenerates the performances
-    - might due to multiplied lr on embedding MLPs
-    - experiment using layer-specified learning rate
-    - result: changed $X$ to $f_\phi(X)$ to filter => degenerates perf.
+
 21. Add flag to switch v2/v0 BFs, add argparsers
 22. Dynamic as graph connection => t as feature
-22. Relative postion as DGCNN?
+23. Adversarial noise generator
+24. Large PC eval test
+25. Add MoNet baseline
+
+### Future Directions
+
+1. Fuzzy
+2. Meta-Learning 
+3. Adversarial
+4. Time Series
+
 
 ### Comparisons
-| $\sigma$       | 1    | 5         | 10  |
-| -------------- | ---- | --------- | --- |
-| Original       | 1    | 25        | 100 |
-| Plain BF       | 0.30 | 8.76      |     |
-| AmaBF(w/o act) | 0.13 | 0.50      |     |
-| DGCNN(w/o act) |      | 0.74      |     |
-| DGCNN(w/ act)  |      | 0.731@370 |     |
-| GAT(w/o act)   |      | <0.93     |     |
-| GAT(w/ act)    |      | 0.75@290  |     |
+| $\sigma$       | 1    | 5         | 10     |
+| -------------- | ---- | --------- | ------ |
+| Original       | 1    | 25        | 100    |
+| Plain BF       | 0.30 | 8.76      |        |
+| AmaBF(w/o act) | 0.13 | 0.50      |        |
+| AmaBF(w/ act)  | 0.13 | 0.425@340 | <0.560 |
+| DGCNN(w/o act) |      | 0.74      |        |
+| DGCNN(w/ act)  |      | 0.731@370 |        |
+| GAT(w/o act)   |      | <0.93     |        |
+| GAT(w/ act)    |      | 0.75@290  |        |
 
 - All comparisons @ 100 epochs
 - w/ or w/o activation for GAT seems has no difference on denoising
@@ -77,14 +76,29 @@
    w_{ij}=\exp(-\frac 1 2 (\bold {e'}_{ij}^T\bold \Sigma^{-1}\bold {e'}_{ij}))\\
    \bold {e'}_{ij} = \bold x_i - \bold x_j
    $$
+   Note: using original postion in relative position
+   Note: Covariance $\bold \Sigma$ is diagonal
+   - Can this be like in form of Cholesky Decomp. $\bold \Sigma = \bold \Gamma \bold \Gamma^T, \bold \Gamma \in \R^{n\times k}$
+   - Cholesky Decomp. is low-rank decomp. any further?
 
 6. AmaFilter(BF): activation-free
    $$
-   \bold X^{l+1}=\bold D^{-1}_{W}\bold W\bold X^{l}\bold \Theta\\
+   \bold X^{l+1}=\sigma(\bold D^{-1}_{W}\bold W\bold X^{l}\bold \Theta)\\
    w_{ij}=\exp(-\|\bold \phi(\bold x'_i)-\phi(\bold x'_j)\|^2)
    $$
 
-### Future Directions
+### Done TODOs
 
-1. Fuzzy
-2. Meta-Learning 
+1. ~~Test on modelnet40~~
+2. ~~Implement on MPEG large dataset~~
+3. ~~Implement parallel training~~
+4. ~~Calculate Std. Dev. => Impl. 10-30 std. jitter~~
+9.  ~~Why MSE mismatch? :NaN data!~~
+10. ~~Smaller/faster model~~
+11. ~~Move embedding layer into BF(i.e. reduce repeated node embedding computation)(by make an alternative Weight)~~
+    - ~~Need testing~~
+    - ~~Why the performance is worse? same pipeline~~
+    - ~~increase of batchsize? 32->64(8 on each gpu) does not degenerates the performances~~
+    - ~~might due to multiplied lr on embedding MLPs~~
+    - ~~experiment using layer-specified learning rate~~
+    - ~~result: changed $X$ to $f_\phi(X)$ to filter => degenerates perf.~~

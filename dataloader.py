@@ -3,28 +3,29 @@ Dataloaders of datasets: MPEG etc.
 TODO:
     1. -Generate various sigma data-
 """
-from scaffold import *
-from utils import tensorinfo, mse
-import torch
+import gc
+import json
+import math
+import os
+import random
+import shutil
+import sys
+import time
+from argparse import ArgumentParser
+from multiprocessing import Pool, Process, Queue, TimeoutError
+from os.path import join
+
+import colorama
 import numpy as np
 import scipy.io as spio
-from torch_geometric.data import InMemoryDataset, Data
-from torch_geometric.data import DataListLoader, DataLoader
+import torch
 import torch_geometric.nn as tgnn
-
-import sys
-import os
-import math
-import random
-import json
-import time
-import gc
-import colorama
-from os.path import join
+from torch_geometric.data import Data, DataListLoader, DataLoader, InMemoryDataset
 from tqdm import *
-from multiprocessing import Process, Queue, Pool, TimeoutError
-from argparse import ArgumentParser
-import shutil
+
+
+from scaffold import *
+from utils import mse, tensorinfo
 
 colorama.init(autoreset=True)
 
@@ -40,9 +41,9 @@ def whiten(v):
     NOTE: for std~=0 data, add eps=1e-6
     OPT: could merge into one
     """
-    if len(v.shape) == 2: # single PC
+    if len(v.shape) == 2:  # single PC
         return (v - v.mean(dim=0)) / (v.std(dim=0) + 1e-6)
-    elif len(v.shape) == 3: # batch
+    elif len(v.shape) == 3:  # batch
         return (v - v.mean(dim=-2, keepdim=True)) / (v.std(dim=-2, keepdim=True) + 1e-6)
     else:
         raise ValueError
@@ -211,7 +212,9 @@ class MPEGDataset(InMemoryDataset):
                     # print(noise.norm())
                     data.x = data.x + noise
                     # check nan
-                    assert not torch.any(torch.isnan(data.x)), "NaN detected @ %d!" % (len(data_list))
+                    assert not torch.any(torch.isnan(data.x)), "NaN detected @ %d!" % (
+                        len(data_list)
+                    )
                     # print(mse(data.x, data.y))
                     data_list.append(data)
 
@@ -256,7 +259,7 @@ def MPEGTransform(data, func=whiten):
     # data.x = whiten(data.x)
     for key in data.keys:
         # process all tensors
-        if torch.is_tensor(data[key]) and key != 'kernel_z':
+        if torch.is_tensor(data[key]) and key != "kernel_z":
             data[key] = func(data[key])
     return data
 
@@ -327,7 +330,7 @@ if __name__ == "__main__":
             orig_dataset_dir = "data/raw"
             dataset_dir = "data-%.1f" % sigma
             raw_dir = os.path.join(dataset_dir, "raw")
-            proc_dir = os.path.join(dataset_dir, 'processed')
+            proc_dir = os.path.join(dataset_dir, "processed")
             if os.path.exists(raw_dir):
                 print(colorama.Fore.RED + "Removing old raw at %s" % raw_dir)
                 shutil.rmtree(raw_dir)
