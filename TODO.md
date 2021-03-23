@@ -40,7 +40,7 @@
 | Plain BF              | 0.30 | 8.76      |           |
 | AmaBF(w/o act)        | 0.13 | 0.50      |           |
 | AmaBF(w/ act)         | 0.13 | 0.425@340 | <0.543@50 |
-| AmaBF(w/ act+g. reg.) |      | 0.500@10  |           |
+| AmaBF(w/ act+g. reg.) |      | 0.368@280 |           |
 | DGCNN(w/o act)        |      | 0.74      |           |
 | DGCNN(w/ act)         |      | 0.731@370 |           |
 | GAT(w/o act)          |      | <0.93     |           |
