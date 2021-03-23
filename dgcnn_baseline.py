@@ -29,7 +29,7 @@ from utils import *
 from train_bf import process_batch, train, evaluate, get_data
 from dataloader import ADataListLoader, MPEGDataset, MPEGTransform
 from bf import MLP
-from gat_baseline import GATDenoiser
+from gat_baseline import GATDenoiser, MoNetDenoiser
 
 scaf = Scaffold()
 scaf.debug()
@@ -68,10 +68,7 @@ class DGCNNFilter(nn.Module):
         self.filters = nn.ModuleList([DynamicEdgeConv(mlp, k=32) for mlp in self.mlps])
         self.activation = nn.ModuleList(
             [
-                nn.Sequential(
-                    nn.ReLU(),
-                    nn.BatchNorm1d(o)
-                )
+                nn.Sequential(nn.ReLU(), nn.BatchNorm1d(o))
                 if idx != len(hidden_layers) - 2
                 else nn.Identity()
                 for idx, (i, o) in enumerate(layers(hidden_layers))
@@ -99,7 +96,7 @@ if __name__ == "__main__":
         pl_path = "modelnet40-1024"
         data_path = os.path.join("/data", "pkurei", pl_path)
     elif dataset_type == "MPEG":
-        model_name = "mpeg-dgcnn-5.0sgd"
+        model_name = "mpeg-monet-5.0sgd"
         model_path = os.path.join("model", model_name, str(timestamp))
         # pl_path = 'pku'
         data_path = os.path.join("data-5.0")
@@ -133,6 +130,12 @@ if __name__ == "__main__":
             ],
         )
         batch_size = 40 * ngpu  # bs depends on GPUs used
+    elif re.search("monet", model_name):
+        model = MoNetDenoiser(
+            fin=6, hidden_layers=[64, 128, 6], kernel_size=8, separate_gaussians=False
+        )
+        batch_size = 4 * ngpu
+        # NOTE: 8 might be unfair.
     else:
         raise NotImplementedError
 

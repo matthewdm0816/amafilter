@@ -188,7 +188,12 @@ def evaluate(model, loader, dataset_type, parallel: bool, epoch: int):
             batch, orig_mse = process_batch(batch, parallel, dataset_type)
 
             orig_psnr = mse_to_psnr(orig_mse)
-            out, loss, mse_loss = model(batch)
+            out, *loss = model(batch)
+            # compatibility to no mse out nets
+            if len(loss) == 2:
+                loss, mse_loss = loss
+            elif len(loss) == 1:
+                loss, mse_loss = loss[0], loss[0]
             loss = loss.mean()
             mse_loss = mse_loss.mean()
 

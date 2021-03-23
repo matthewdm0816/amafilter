@@ -34,17 +34,18 @@
 
 
 ### Comparisons
-| $\sigma$              | 1    | 5         | 10        |
-| --------------------- | ---- | --------- | --------- |
-| Original              | 1    | 25        | 100       |
-| Plain BF              | 0.30 | 8.76      |           |
-| AmaBF(w/o act)        | 0.13 | 0.50      |           |
-| AmaBF(w/ act)         | 0.13 | 0.425@340 | <0.543@50 |
-| AmaBF(w/ act+g. reg.) |      | 0.368@280 |           |
-| DGCNN(w/o act)        |      | 0.74      |           |
-| DGCNN(w/ act)         |      | 0.731@370 |           |
-| GAT(w/o act)          |      | <0.93     |           |
-| GAT(w/ act)           |      | 0.75@290  |           |
+| $\sigma$                 | 1    | 5         | 10        |
+| ------------------------ | ---- | --------- | --------- |
+| Original                 | 1    | 25        | 100       |
+| Plain BF                 | 0.30 | 8.76      |           |
+| AmaBF(w/o act)           | 0.13 | 0.50      |           |
+| AmaBF(w/ act)            | 0.13 | 0.425@340 | <0.543@50 |
+| AmaBF(w/ act+g. reg.)    |      | 0.368@300 |           |
+| MoNet $\times 4$(w/ act) |      | 0.475@10  |           |
+| DGCNN(w/o act)           |      | 0.74      |           |
+| DGCNN(w/ act)            |      | 0.731@370 |           |
+| GAT(w/o act)             |      | <0.93     |           |
+| GAT(w/ act)              |      | 0.75@290  |           |
 
 - All comparisons @ 100 epochs
 - w/ or w/o activation for GAT seems has no difference on denoising

@@ -36,26 +36,33 @@ from train_bf import process_batch
 from dataloader import ADataListLoader, MPEGDataset, MPEGTransform
 from bf import MLP
 
+scaf = Scaffold()
+scaf.debug()
+sprint = scaf.print
+warn = scaf.warn
+
 
 class BaseDenoiser(nn.Module):
     r"""
     Generic Base Denoiset Architecture
     x=>FILTER=>ACTIVATION(if not output layer)=>...=>y
     """
+
     def __init__(self, fin, hidden_layers, activation: bool = True):
         super().__init__()
         self.fin, self.hidden_layers = fin, self.process_fin(fin) + hidden_layers
         self.filters = nn.ModuleList(
-            [self.get_layer(i, o) for i, o in layers(hidden_layers)]
+            [self.get_layer(i, o) for i, o in layers(self.hidden_layers)]
         )
         self.activation = nn.ModuleList(
             [
                 self.get_activation(i, o)
-                if idx != len(hidden_layers) - 2
+                if idx != len(self.hidden_layers) - 2
                 else nn.Identity()
-                for idx, (i, o) in enumerate(layers(hidden_layers))
+                for idx, (i, o) in enumerate(layers(self.hidden_layers))
             ]
         )
+        self.has_activation = activation
 
     def get_layer(self, i, o):
         raise NotImplementedError
@@ -65,6 +72,9 @@ class BaseDenoiser(nn.Module):
 
     def process_fin(self, fin):
         return NotImplementedError
+
+    # def calc_filter(x, filter, edge_index):
+    #     return filter(x, edge_index=edge_index)
 
     def forward(self, data):
         # print(data)
@@ -136,22 +146,47 @@ class GATDenoiser(nn.Module):
 
 class MoNetDenoiser(BaseDenoiser):
     def __init__(
-        self, fin, hidden_layers, activation: bool = True, kernel_size: int = 8, separate_gaussians: bool = True
+        self,
+        fin,
+        hidden_layers,
+        activation: bool = True,
+        kernel_size: int = 8,
+        separate_gaussians: bool = True,
     ):
         self.kernel_size = kernel_size
-        self.separate_gaussians=separate_gaussians
+        self.separate_gaussians = separate_gaussians
         super().__init__(fin, hidden_layers, activation=activation)
 
     def get_activation(self, i, o):
         return nn.Sequential(
-            nn.LeakyReLU(negative_slope=0.2),
-            nn.BatchNorm1d(o["f"] * o["heads"]),
+            nn.PReLU(),
+            nn.BatchNorm1d(o),
         )
 
     def get_layer(self, i, o):
+        sprint("Created GMMConv %d => %d" % (i, o))
         return GMMConv(
-            in_channels=i, out_channels=0, dim=i, kernel_size=self.kernel_size, separate_gaussians=self.separate_gaussians
+            in_channels=i,
+            out_channels=o,
+            dim=i,
+            kernel_size=self.kernel_size,
+            separate_gaussians=self.separate_gaussians,
         )
-    
+
     def process_fin(self, fin):
         return [fin]
+
+    def forward(self, data):
+        target, batch, x = data.y, data.batch, data.x
+        for i, (filter, activation) in enumerate(zip(self.filters, self.activation)):
+            edge_index = knn_graph(x, k=32, batch=batch, loop=False)
+            row, col = edge_index
+            edge_attr = x[row] - x[col]
+            # print(edge_attr.shape, edge_index.shape)
+            # e_ij = x_i - x_j
+            x = filter(x, edge_index=edge_index, edge_attr=edge_attr)
+            if self.has_activation:
+                x = activation(x)
+
+        loss = mse(x, target)
+        return x, loss
