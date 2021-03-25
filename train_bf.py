@@ -226,8 +226,9 @@ if __name__ == "__main__":
     parser.add_argument("-m", "--model", type=str, help="Specify model type")
     parser.add_argument("--gpus", type=int, nargs="+")
     parser.add_argument("-r", "--regularization", type=float, help="Specify graph regularization strength, 0 stands for none", nargs="?", const=0.)
+    parser.add_argument("-l", "--loss", type=str, help="Specify loss type", nargs="?", const="mse") # alternative: chamfer
     args = parser.parse_args()
-    optimizer_type, dataset_type, gpu_ids, gpu_id, ngpu, parallel, epochs, model_name, data_path, regularization = parse_config(args)
+    optimizer_type, dataset_type, gpu_ids, gpu_id, ngpu, parallel, epochs, model_name, data_path, regularization, loss_type = parse_config(args)
 
     # get training IDs
     timestamp = init_train(parallel, gpu_ids)
@@ -275,12 +276,14 @@ if __name__ == "__main__":
         dataset_type,
         bfilter,
         device,
+        batch_size= batch_size // ngpu, # batch_size on single GPU
         activation=True,
         parallel=parallel,
         use_sbn=True,
         gpu_ids=gpu_ids,
         gpu_id=gpu_id,
-        reg=regularization
+        reg=regularization,
+        loss_type=loss_type
     )
 
     # show named modules

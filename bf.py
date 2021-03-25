@@ -322,7 +322,7 @@ class GraphRegularizer(MessagePassing):
         edge_weight ~ [E, 1]
         """
         # batch outer prod.
-        xdim = x_i.shape[-1] # i.e. FIN
+        xdim = x_i.shape[-1]  # i.e. FIN
         res = torch.einsum("bi,bj->bij", x_i, x_j)
         # print(res.shape)
         return edge_weight.view(-1, 1) * res.view(-1, xdim * xdim)
@@ -361,10 +361,12 @@ class AmaFilter(nn.Module):
         k=16,
         filter=BilateralFilter,
         activation: bool = True,
-        reg: float = 0.,
+        reg: float = 0.0,
+        loss_type: Optional[str] = None,
     ):
         super().__init__()
         self.fin, self.fout, self.k = fin, fout, k
+        self.loss_type= loss_type
         hidden_layers = [fin, 64 + fin, 128 + 64 + fin, fout]
         # total = 0
         # for idx, h in enumerate(hidden_layers):
@@ -391,10 +393,10 @@ class AmaFilter(nn.Module):
         )
 
         self.nfilters = len(self.filters)
-        if reg >= 1e-6: # non-zero G. Reg.
+        if reg >= 1e-6:  # non-zero G. Reg.
             self.reg = GraphRegularizer()
             self.reg_coeff = reg
-            print(colorama.Fore.GREEN + 'Using reg={:.1E}'.format(reg))
+            print(colorama.Fore.GREEN + "Using reg={:.1E}".format(reg))
         else:
             self.reg = None
 
@@ -414,13 +416,19 @@ class AmaFilter(nn.Module):
             x = torch.cat((x, y), dim=-1) if i != self.nfilters - 1 else y
             if self.has_activation:
                 x = act(x)
-        loss = mse(x, target)
-        mse_loss = loss
+        if self.loss_type == "mse":
+            loss = mse(x, target)
+        elif self.loss_type == "chamfer":
+            loss = chamfer_measure(x, target, batch)
+        else: 
+            raise NotImplementedError
+        # loss = self.loss(x, target)
+        mse_loss = mse(x, target)
         if self.reg is not None:
             reg_loss = self.reg(x, k=self.k, batch=batch) * self.reg_coeff
         else:
-            reg_loss = torch.tensor([0.])
-        return x, reg_loss + loss, loss
+            reg_loss = torch.tensor([0.0])
+        return x, reg_loss + loss, mse_loss
 
 
 if __name__ == "__main__":

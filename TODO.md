@@ -18,12 +18,16 @@
 21. Add flag to switch v2/v0 BFs, add argparsers
 22. Dynamic as graph connection => t as feature
 23. Adversarial noise generator
+    - Shared param?
 24. Large PC eval test
 25. ~~Add MoNet baseline~~
-   - Need for test
+    - Need for test
 26. PCA+ICA baseline
+    - Infomax ~ Yet another loss!
+    - Kurtosis/negentropy: use sklearn
 27. Baselines in paper
-28. Manifold-Manifold distance as loss
+28. Manifold-Manifold/Chamfer Measure distance as loss
+    - Use existing Chamfer Loss CUDA impl. 
 
 ### Future Directions
 
@@ -41,7 +45,7 @@
 | AmaBF(w/o act)           | 0.13 | 0.50      |           |
 | AmaBF(w/ act)            | 0.13 | 0.425@340 | <0.543@50 |
 | AmaBF(w/ act+g. reg.)    |      | 0.368@300 |           |
-| MoNet $\times 4$(w/ act) |      | 0.475@10  |           |
+| MoNet $\times 4$(w/ act) |      | 0.47@250 |           |
 | DGCNN(w/o act)           |      | 0.74      |           |
 | DGCNN(w/ act)            |      | 0.731@370 |           |
 | GAT(w/o act)             |      | <0.93     |           |
@@ -50,6 +54,7 @@
 - All comparisons @ 100 epochs
 - w/ or w/o activation for GAT seems has no difference on denoising
 - On SGD+M/Nesterov: slightly better generalization compared to Adam
+- MoNet: wavy performance on test set. do reduce consistently on train set
 
 ### Theory Backgrounds
 
@@ -87,7 +92,7 @@
    - Can this be like in form of Cholesky Decomp. $\bold \Sigma = \bold \Gamma \bold \Gamma^T, \bold \Gamma \in \R^{n\times k}$
    - Cholesky Decomp. is low-rank decomp. any further?
 
-6. AmaFilter(BF): activation-free
+6. AmaFilter(BF): activation-free is OK
    $$
    \bold X^{l+1}=\sigma(\bold D^{-1}_{W}\bold W\bold X^{l}\bold \Theta)\\
    w_{ij}=\exp(-\|\bold \phi(\bold x'_i)-\phi(\bold x'_j)\|^2)

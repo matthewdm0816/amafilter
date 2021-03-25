@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import torch.nn.init as init
 import torch_geometric as tg
 import colorama, json
+from typing import Optional
 
 colorama.init(autoreset=True)
 
@@ -256,23 +257,46 @@ def get_model(
     dataset_type: str,
     bfilter,
     device,
+    batch_size: int,
     activation: bool = True,
     parallel: bool = False,
     use_sbn: bool = True,
     gpu_ids=(0,),
     gpu_id=0,
-    reg: float = 0.,
+    reg: float = 0.0,
+    loss_type: str = "mse",
 ):
     from bf import AmaFilter
     from torch_geometric.nn import DataParallel
+    from utils import mse, chamfer_measure
+
+    assert loss_type in ["mse", "chamfer"]
+    # if loss_type == "mse":
+    #     loss = mse
+    # elif loss_type == "chamfer":
+    #     loss = lambda x, y: chamfer_measure(x, y, batch_size=batch_size)
+    # else:
+    #     raise NotImplementedError
 
     if dataset_type == "MN40":
         model = AmaFilter(
-            3, 3, k=32, activation=activation, filter=bfilter, reg=reg
+            3,
+            3,
+            k=32,
+            activation=activation,
+            filter=bfilter,
+            reg=reg,
+            loss_type=loss_type,
         )
     elif dataset_type == "MPEG":
         model = AmaFilter(
-            6, 6, k=32, filter=bfilter, activation=activation, reg=reg
+            6,
+            6,
+            k=32,
+            filter=bfilter,
+            activation=activation,
+            reg=reg,
+            loss_type=loss_type,
         )
         print(colorama.Fore.MAGENTA + "Using filter type %s" % bfilter.__name__)
 
@@ -368,5 +392,43 @@ def parse_config(args):
         args.total,
         args.model,
         args.path,
-        args.regularization
+        args.regularization,
+        args.loss,
+    )re
+
+
+def chamfer_measure(fake, real, batch):
+    # use code module from https://github.com/ThibaultGROUEIX/ChamferDistancePytorch
+    # Using 6D chamfer dist. ~ RGB+XYZ
+    from ChamferDistancePytorch.chamfer6D import dist_chamfer_6D
+
+    batch_size = batch.max() + 1
+    chamloss = dist_chamfer_6D.chamfer_6DDist()
+    d1, d2, _, _ = chamloss(fake.view(batch_size, -1, 6), real.view(batch_size, -1, 6))
+    return (d1 + d2).mean()
+
+def get_ad_optimizer(model, optimizer_type: str, lr: float=0.002, beg_epochs: int=0):
+    from torch import optim
+    print(colorama.Fore.RED + "Using optimizer type %s" % optimizer_type)
+    if optimizer_type == "Adam":
+        raise NotImplementedError
+        optimizer = optim.Adam(
+            [
+                {"params": model.parameters(), "initial_lr": 0.002},
+                # {"params": model.parameters(), "initial_lr": 0.002}
+            ],
+            lr=0.002,
+            weight_decay=5e-4,
+            betas=(0.9, 0.999),
+        )
+    elif optimizer_type == "SGD":
+        # Using SGD Nesterov-accelerated with Momentum
+        gen, den, dis = model.modules.gen, model.modules.den, model.modules.dis
+        gen_opt = optim.SGD({"params": gen.parameters(), "initial_lr": lr}, lr=lr, weight_decay=5e-4, momentum=0.9)
+        den_opt = optim.SGD({"params": den.parameters(), "initial_lr": 0.002})
+        dis_opt = optim.SGD({"params": dis.parameters(), ""})
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=100, last_epoch=beg_epochs
     )
+    return optimizer, scheduler
+    pass

@@ -3,6 +3,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 from torch import optim
+# import torch.linalg
 
 # from torchsummary import summary
 import torch_geometric.nn as tgnn
@@ -190,3 +191,31 @@ class MoNetDenoiser(BaseDenoiser):
 
         loss = mse(x, target)
         return x, loss
+
+
+class ICADenoiser(nn.Module):
+    def __init__(self, fin):
+        super().__init__()
+        self.fin = fin
+        self.lin = nn.Linear(fin, fin)
+
+    def whiten(self, x, batch_size: int):
+        r"""
+        Perform batch whiten, by SVD
+        $\Sigma = U\Lambda V^T$ (for square matrices, U=V)
+        $\tilde X = U^T \Lambda^{-1/2} X$
+        """
+        x = x.view(batch_size, -1, self.fin)
+        # x ~ [B, N, F]
+        u, s, _ = torch.svd(x, some=True)
+        # s ~ [B, N], U, V ~ [B, N, N]
+        x = x - x.mean(dim=-2)
+        norm = torch.bmm(torch.diag_embed(s.pow(-0.5)), torch.transpose(u, -1, -2))
+        x = torch.bmm(norm, x)
+        return x
+
+    def forward(self, data, batch_size: int):
+        target, batch, x = data.y, data.batch, data.x
+        x = self.whiten(x, batch_size)
+        # TODO
+        pass
