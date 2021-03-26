@@ -366,7 +366,7 @@ class AmaFilter(nn.Module):
     ):
         super().__init__()
         self.fin, self.fout, self.k = fin, fout, k
-        self.loss_type= loss_type
+        self.loss_type= loss_type if loss_type is not None else "mse"
         hidden_layers = [fin, 64 + fin, 128 + 64 + fin, fout]
         # total = 0
         # for idx, h in enumerate(hidden_layers):
@@ -406,6 +406,8 @@ class AmaFilter(nn.Module):
         """
         # print(data)
         target, batch, x = data.y, data.batch, data.x
+        # if "noise" in data.keys:
+        #     x = torch.cat([x, data.noise], dim=-1)
 
         for i, (filter, act) in enumerate(zip(self.filters, self.activation)):
             # dynamic graph? yes!
@@ -427,7 +429,7 @@ class AmaFilter(nn.Module):
         if self.reg is not None:
             reg_loss = self.reg(x, k=self.k, batch=batch) * self.reg_coeff
         else:
-            reg_loss = torch.tensor([0.0])
+            reg_loss = torch.tensor([0.0]).to(loss)
         return x, reg_loss + loss, mse_loss
 
 

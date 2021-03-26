@@ -67,15 +67,31 @@ dataset_type = "MPEG"
 assert dataset_type in ["MPEG", "MN40"]
 bfilter = BilateralFilterv2
 
+def copy_batch(batch):
+    if isinstance(batch, list):
+        return [data.clone().to(data.x) for data in batch]
+    else:
+        return batch.clone().to(batch.x)
+
+# def substitute_x(batch, x):
+#     batch.x = x
+
+# def apply_batch(batch, f, *args, **kwargs):
+#     # maybe return a new clone?
+#     if isinstance(batch, list):
+#         return [f(data, *args, **kwargs) for data in batch]
+#     else:
+#         return f(batch, *args, **kwargs)
 
 def process_batch(batch, parallel, dataset_type):
-    if parallel:
-        # FIXME: concat again after one epoch
-        # NOTE: must need to make full clone
-        result_batch = [data.clone() for data in batch]
-    else:
-        # make a result_batch for non-parallel runs
-        result_batch = batch.clone()
+    # if parallel:
+    #     # FIXME: concat again after one epoch
+    #     # NOTE: must need to make full clone
+    #     result_batch = [data.clone() for data in batch]
+    # else:
+    #     # make a result_batch for non-parallel runs
+    #     result_batch = batch.clone()
+    result_batch = copy_batch(batch)
     if dataset_type == "MN40":
         if parallel:
             batch = parallel_cuda(batch, device)

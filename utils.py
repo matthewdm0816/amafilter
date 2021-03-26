@@ -250,6 +250,7 @@ def parallelize_model(model, device, gpu_ids, gpu_id):
     model = DataParallel(model, device_ids=gpu_ids, output_device=gpu_id).to(device)
     # else:
     #     model = model.to(device)
+    print("Parallelized model")
     return model
 
 
@@ -394,7 +395,7 @@ def parse_config(args):
         args.path,
         args.regularization,
         args.loss,
-    )re
+    )
 
 
 def chamfer_measure(fake, real, batch):
@@ -407,28 +408,44 @@ def chamfer_measure(fake, real, batch):
     d1, d2, _, _ = chamloss(fake.view(batch_size, -1, 6), real.view(batch_size, -1, 6))
     return (d1 + d2).mean()
 
-def get_ad_optimizer(model, optimizer_type: str, lr: float=0.002, beg_epochs: int=0):
+
+def get_ad_optimizer(
+    models, optimizer_type: str, lr: float = 2e-3, beg_epochs: int = 0
+):
     from torch import optim
+
     print(colorama.Fore.RED + "Using optimizer type %s" % optimizer_type)
     if optimizer_type == "Adam":
-        raise NotImplementedError
-        optimizer = optim.Adam(
-            [
-                {"params": model.parameters(), "initial_lr": 0.002},
-                # {"params": model.parameters(), "initial_lr": 0.002}
-            ],
-            lr=0.002,
+        gen, den = models
+        gen_opt = optim.Adam(
+            [{"params": gen.parameters(), "initial_lr": lr}],
+            lr=lr,
             weight_decay=5e-4,
-            betas=(0.9, 0.999),
+        )
+        den_opt = optim.Adam(
+            [{"params": den.parameters(), "initial_lr": lr}],
+            lr=lr,
+            weight_decay=5e-4,
         )
     elif optimizer_type == "SGD":
         # Using SGD Nesterov-accelerated with Momentum
-        gen, den, dis = model.modules.gen, model.modules.den, model.modules.dis
-        gen_opt = optim.SGD({"params": gen.parameters(), "initial_lr": lr}, lr=lr, weight_decay=5e-4, momentum=0.9)
-        den_opt = optim.SGD({"params": den.parameters(), "initial_lr": 0.002})
-        dis_opt = optim.SGD({"params": dis.parameters(), ""})
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=100, last_epoch=beg_epochs
+        gen, den = models
+        gen_opt = optim.SGD(
+            [{"params": gen.parameters(), "initial_lr": lr}],
+            lr=lr,
+            weight_decay=5e-4,
+            momentum=0.9,
+        )
+        den_opt = optim.SGD(
+            [{"params": den.parameters(), "initial_lr": lr}],
+            lr=lr,
+            weight_decay=5e-4,
+            momentum=0.9,
+        )
+    gen_scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        gen_opt, T_max=100, last_epoch=beg_epochs
     )
-    return optimizer, scheduler
-    pass
+    den_scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        den_opt, T_max=100, last_epoch=beg_epochs
+    )
+    return [gen_opt, den_opt], [gen_scheduler, den_scheduler]

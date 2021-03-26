@@ -2,32 +2,26 @@
 1. Learn displacement vector rather than filtered position
 6. Use specific channels for loss calc. (i.e. color only)
 7. Impl. further benchmark metrics
-8. Try alternative optimizers(esp. SGD)
-    - Tried: SGD with M+Nesterov
 11. Re-generate dataset
     - ~~How to reduce number of patches to acceptable amount: take 10 patches~~
-    - FPS might be clustering in point clound sequence
+    - FPS might be clustering in point cloud sequence
 12. Re-split dataset in in-class fashion
-13. Add attention? 
 14. Patch aggregation (and test)
 15. MAML scheme? meta-train/test on several train labels to acquire few-shot learning
-17. ~~Add graph reg. term, i.e. $\tau x^T L x$~~
-18. Try different layer stucture
-19. Try multiple $W_{ij}$(i.e. edge weight) type
-
-21. Add flag to switch v2/v0 BFs, add argparsers
-22. Dynamic as graph connection => t as feature
-23. Adversarial noise generator
+16. Try different layer stucture
+17. Try multiple $W_{ij}$(i.e. edge weight) type
+18. Add flag to switch v2/v0 BFs, add argparsers
+19. Dynamic as graph connection => t as feature
+20. Adversarial noise generator
     - Shared param?
-24. Large PC eval test
-25. ~~Add MoNet baseline~~
-    - Need for test
-26. PCA+ICA baseline
+21. Large PC eval test
+22. More noise type: blur/scanner
+23. PCA+ICA baseline
     - Infomax ~ Yet another loss!
     - Kurtosis/negentropy: use sklearn
-27. Baselines in paper
-28. Manifold-Manifold/Chamfer Measure distance as loss
-    - Use existing Chamfer Loss CUDA impl. 
+24. Baselines in paper
+25. Manifold-Manifold/Chamfer Measure distance as loss
+    - ~~Use existing Chamfer Loss CUDA impl.~~
 
 ### Future Directions
 
@@ -45,16 +39,21 @@
 | AmaBF(w/o act)           | 0.13 | 0.50      |           |
 | AmaBF(w/ act)            | 0.13 | 0.425@340 | <0.543@50 |
 | AmaBF(w/ act+g. reg.)    |      | 0.368@300 |           |
-| MoNet $\times 4$(w/ act) |      | 0.47@250 |           |
+| AmaBF(w/ act+g. reg.+CM) |      | 0.617@50  |           |
+| Adversarial Noisy        |      | Testing   |           |
+| MoNet $\times 4$(w/ act) |      | 0.47@250  |           |
 | DGCNN(w/o act)           |      | 0.74      |           |
 | DGCNN(w/ act)            |      | 0.731@370 |           |
 | GAT(w/o act)             |      | <0.93     |           |
 | GAT(w/ act)              |      | 0.75@290  |           |
-
+- CM: Chamfer Measure:
+    $$
+    C(S,\hat S)=\frac 1 {|S|}\sum_{s\in S}\min_{\hat s'\in \hat S}\|s-\hat s'\|^2 + \frac 1 {|\hat S|}\sum_{\hat s\in \hat S}\min_{s'\in S}\|s'-\hat s\|^2
+    $$
 - All comparisons @ 100 epochs
 - w/ or w/o activation for GAT seems has no difference on denoising
 - On SGD+M/Nesterov: slightly better generalization compared to Adam
-- MoNet: wavy performance on test set. do reduce consistently on train set
+- MoNet: wavy performance on test set. although consistently on train set
 
 ### Theory Backgrounds
 
@@ -113,3 +112,10 @@
     - ~~might due to multiplied lr on embedding MLPs~~
     - ~~experiment using layer-specified learning rate~~
     - ~~result: changed $X$ to $f_\phi(X)$ to filter => degenerates perf.~~
+17. ~~Add graph reg. term, i.e. $\tau x^T L x$~~
+25. ~~Add MoNet baseline~~
+    - ~~
+26. ~~Try alternative optimizers(esp. SGD)~~
+    - Tried: SGD with M+Nesterov
+13. ~~Add attention? ~~
+    - Not neccessary
