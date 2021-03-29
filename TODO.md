@@ -42,21 +42,23 @@
 
 
 ### Comparisons
-| $\sigma$                        | 1          | 5                                      | 10        |
-| ------------------------------- | ---------- | -------------------------------------- | --------- |
-| Original                        | 1          | 25                                     | 100       |
-| Plain BF                        | 0.30       | 8.76                                   |           |
-| AmaBF(w/o act)                  | 0.13       | 0.50                                   |           |
-| AmaBF(w/ act)                   | 0.13       | 0.425@340                              | <0.543@50 |
-| AmaBF(w/ act+g. reg.)           | 0.188 @ 85 | 0.368@300                              |           |
-| AmaBF(w/ act+g. reg.+CM)        |            | 0.617@50                               |           |
-| AmaBF(w/ act+g. reg.+singleMLP) |            | <0.55 @10                              |           |
-| Adversarial Noisy               |            | on Ad noise: 0.267, on Gaussian: 0.657 |           |
-| MoNet $\times 4$(w/ act)        |            | 0.47@250                               |           |
-| DGCNN(w/o act)                  |            | 0.74                                   |           |
-| DGCNN(w/ act)                   |            | 0.731@370                              |           |
-| GAT(w/o act)                    |            | <0.93                                  |           |
-| GAT(w/ act)                     |            | 0.75@290                               |           |
+| $\sigma$                        | 1     | 5         | 10        |
+| ------------------------------- | ----- | --------- | --------- |
+| Original                        | 1     | 25        | 100       |
+| Plain BF                        | 0.30  | 8.76      |           |
+| AmaBF(w/o act)                  | 0.13  | 0.50      |           |
+| AmaBF(w/ act)                   | 0.13  | 0.425@340 | 0.543@50  |
+| AmaBF(w/ act+g. reg.)           | 0.188 | 0.368@300 |           |
+| AmaBF(w/ act+g. reg.+CM)        |       | 0.617@50  |           |
+| AmaBF(w/ act+g. reg.+singleMLP) |       | <0.55 @10 |           |
+| Adversarial Noisy               |       | *         |           |
+| MoNet $\times 4$(w/ act)        |       | 0.47@250  |           |
+| DGCNN(w/o act)                  |       | 0.74      |           |
+| DGCNN(w/ act)                   |       | 0.731@370 |           |
+| GAT(w/o act)                    |       | <0.93     |           |
+| GAT(w/ act)                     |       | 0.75@290  |           |
+- \* on Ad noise: 0.267, on Gaussian: 0.657
+
 - CM: Chamfer Measure:
     $$
     C(S,\hat S)=\frac 1 {|S|}\sum_{s\in S}\min_{\hat s'\in \hat S}\|s-\hat s'\|^2 + \frac 1 {|\hat S|}\sum_{\hat s\in \hat S}\min_{s'\in S}\|s'-\hat s\|^2

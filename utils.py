@@ -393,7 +393,7 @@ def parse_config(args):
         args.regularization,
         args.loss,
         torch.device("cuda:%d" % args.gpus[0] if torch.cuda.is_available() else "cpu"),
-        args.batch_size * len(args.gpus)
+        args.batchsize * len(args.gpus)
     )
 
 
@@ -528,29 +528,28 @@ def process_whole(
     ocolor, opos = opatches[:, :, :3], opatches[:, :, 3:]
     ocolor = ocolor * cstd + cmean
     opos = opos * pstd + pmean
-    ocolor = ocolor.view(-1, f_pc)
-    opos = opos.view(-1, f_pc)
+    # ocolor = ocolor.view(-1, f_pc)
+    # opos = opos.view(-1, f_pc)
 
-    # 3a. add overlap
-    # meaner = GraphMeaner().cuda()
-    # ocolor = meaner(ocolor, opos)
-    
-    # # 4. Unique the points
-    # ocolor, opos = ocolor.numpy(), opos.numpy()
-    # cores, labels = dbscan(opos, eps=1e-4, min_samples=1, n_jobs=8)
-    # print(colorama.Fore.MAGENTA + 'Clustered %d points' % cores.shape[0])
-    # ocolor = ocolor[cores]
-    # opos = opos[cores]
     reconstructed = torch.zeros_like(orig_mesh.color)
     reconstructed_cnt = torch.zeros([reconstructed.shape[0]])
-    for patch in patches:
-        reconstructed[patch.patch_index] += ocolor
+    for patch, patch_color in zip(patches, ocolor):
+        reconstructed[patch.patch_index] += patch_color
         reconstructed_cnt[patch.patch_index] += 1.
     # direct averaging TODO: Use more accurate averaging
     reconstructed = reconstructed / reconstructed_cnt
 
-    # 5. calc MSE: TODO:
+    # 3b. rebuild noisy PC
+    noisy = torch.zeros_like(orig_mesh.color)
+    noisy_cnt = torch.zeros([noisy.shape[0]])
+    for patch, patch_color in zip(patches, noisy_color):
+        noisy[patch.patch_index] += patch_color
+        noisy_cnt[patch.patch_index] += 1.
+    # direct averaging TODO: Use more accurate averaging
+    noisy = noisy / noisy_cnt
+
+    # 4. calc MSE
     mse_error = torch.norm(reconstructed - orig_mesh.color)
     
-    return reconstructed, orig_mesh, mse_error
+    return reconstructed, noisy, orig_mesh, mse_error
 

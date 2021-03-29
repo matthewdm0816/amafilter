@@ -323,15 +323,19 @@ if __name__ == "__main__":
 
         # save model for each <milestone_period> epochs (e.g. 10 rounds)
         if epoch % milestone_period == 0 and epoch != 0:
+            if parallel:
+                model_to_save = model.module
+            else:
+                model_to_save = model
             torch.save(
-                model.state_dict(), os.path.join(model_path, "model-%d.save" % (epoch))
+                model_to_save.state_dict(), os.path.join(model_path, "model-%d.save" % (epoch))
             )
             torch.save(
                 optimizer.state_dict(),
                 os.path.join(model_path, "opt-%d.save" % (epoch)),
             )
             torch.save(
-                model.state_dict(), os.path.join(model_path, "model-latest.save")
+                model_to_save.state_dict(), os.path.join(model_path, "model-latest.save")
             )
             torch.save(
                 optimizer.state_dict(), os.path.join(model_path, "opt-latest.save")
@@ -342,7 +346,7 @@ if __name__ == "__main__":
             "train_mse": train_mse,
             "train_psnr": train_psnr,
             "test_mse": eval_mse,
-            "test_psnr": eval_psnr,
+            "test_pmodel_to_savesnr": eval_psnr,
             "train_orig_psnr": train_orig_psnr,
             "test_orig_psnr": test_orig_psnr,
         }
