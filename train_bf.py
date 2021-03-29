@@ -73,24 +73,8 @@ def copy_batch(batch):
     else:
         return batch.clone().to(batch.x)
 
-# def substitute_x(batch, x):
-#     batch.x = x
-
-# def apply_batch(batch, f, *args, **kwargs):
-#     # maybe return a new clone?
-#     if isinstance(batch, list):
-#         return [f(data, *args, **kwargs) for data in batch]
-#     else:
-#         return f(batch, *args, **kwargs)
 
 def process_batch(batch, parallel, dataset_type):
-    # if parallel:
-    #     # FIXME: concat again after one epoch
-    #     # NOTE: must need to make full clone
-    #     result_batch = [data.clone() for data in batch]
-    # else:
-    #     # make a result_batch for non-parallel runs
-    #     result_batch = batch.clone()
     result_batch = copy_batch(batch)
     if dataset_type == "MN40":
         if parallel:
@@ -125,7 +109,7 @@ def process_batch(batch, parallel, dataset_type):
                 result_batch[i].y = torch.cat([data.y, data.z], dim=-1)
         else:
             orig_mse = mse(batch.x, batch.y)
-            result_batch.x = torch.cat([batch.x, batch.y], dim=-1)
+            result_batch.x = torch.cat([batch.x, batch.z], dim=-1)
             result_batch.y = torch.cat([batch.y, batch.z], dim=-1)
 
     # print(result_batch[0].x.shape, result_batch[0].y.shape)
@@ -244,7 +228,7 @@ if __name__ == "__main__":
     parser.add_argument("-r", "--regularization", type=float, help="Specify graph regularization strength, 0 stands for none", nargs="?", const=0.)
     parser.add_argument("-l", "--loss", type=str, help="Specify loss type", nargs="?", const="mse") # alternative: chamfer
     args = parser.parse_args()
-    optimizer_type, dataset_type, gpu_ids, gpu_id, ngpu, parallel, epochs, model_name, data_path, regularization, loss_type = parse_config(args)
+    optimizer_type, dataset_type, gpu_ids, gpu_id, ngpu, parallel, epochs, model_name, data_path, regularization, loss_type, device, batch_size = parse_config(args)
 
     # get training IDs
     timestamp = init_train(parallel, gpu_ids)

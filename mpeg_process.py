@@ -40,15 +40,17 @@ def read_mesh(path: str):
     """
     print(colorama.Fore.RED + "Loading PLY file %s" % path)
     mesh = PlyData.read(path)
+    n_pts = mesh.elements[0].data["x"].shape[0]
+    print("Containing %d points" % n_pts)
     x, y, z = (
-        torch.from_numpy(mesh.elements[0].data["x"].copy()),
-        torch.from_numpy(mesh.elements[0].data["y"].copy()),
-        torch.from_numpy(mesh.elements[0].data["z"].copy()),
+        torch.from_numpy(mesh.elements[0].data["x"].copy()).view(n_pts, -1),
+        torch.from_numpy(mesh.elements[0].data["y"].copy()).view(n_pts, -1),
+        torch.from_numpy(mesh.elements[0].data["z"].copy()).view(n_pts, -1),
     )
     r, g, b = (
-        torch.from_numpy(mesh.elements[0].data["red"].copy()),
-        torch.from_numpy(mesh.elements[0].data["green"].copy()),
-        torch.from_numpy(mesh.elements[0].data["blue"].copy()),
+        torch.from_numpy(mesh.elements[0].data["red"].copy()).view(n_pts, -1),
+        torch.from_numpy(mesh.elements[0].data["green"].copy()).view(n_pts, -1),
+        torch.from_numpy(mesh.elements[0].data["blue"].copy()).view(n_pts, -1),
     )
     pos = torch.cat([x, y, z], dim=-1).to(torch.float32)
     color = torch.cat([r, g, b], dim=-1).to(torch.float32)
@@ -92,7 +94,7 @@ def process_ply(
     # sprint(patches.shape)
     data_list = [
         # ([N, 2048, 3], [N, 2048, 3], [N, 3])
-        Data(color=color[patch], pos=pos[patch], kernel_pos=pos[pk])
+        Data(color=color[patch], pos=pos[patch], patch_index=patch)
         for patch, pk in zip(patches, patch_kernel)
     ]
     return data_list

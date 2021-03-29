@@ -49,6 +49,25 @@ def whiten(v):
         raise ValueError
 
 
+def whiten_with_records(v):
+    # TODO:
+    if len(v.shape) == 2:  # single PC
+        return (
+            (v - v.mean(dim=0)) / (v.std(dim=0) + 1e-6),
+            v.mean(dim=0),
+            v.std(dim=0) + 1e-6,
+        )
+    elif len(v.shape) == 3:  # batch
+        return (
+            (v - v.mean(dim=-2, keepdim=True)) / (v.std(dim=-2, keepdim=True) + 1e-6),
+            v.mean(dim=-2, keepdim=True),
+            v.std(dim=-2, keepdim=True) + 1e-6,
+        )
+        # mean/std ~ [B, N, S]
+    else:
+        raise ValueError
+
+
 def remove_ac(v):
     r"""
     Remove AC component from data

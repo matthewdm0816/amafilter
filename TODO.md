@@ -1,7 +1,6 @@
 ### Bilateral Filter Training TODOs 
 1. Learn displacement vector rather than filtered position
 6. Use specific channels for loss calc. (i.e. color only)
-7. Impl. further benchmark metrics
 11. Re-generate dataset
     - ~~How to reduce number of patches to acceptable amount: take 10 patches~~
     - FPS might be clustering in point cloud sequence
@@ -12,16 +11,27 @@
 17. Try multiple $W_{ij}$(i.e. edge weight) type
 18. Add flag to switch v2/v0 BFs, add argparsers
 19. Dynamic as graph connection => t as feature
-20. Adversarial noise generator
-    - Shared param?
-21. Large PC eval test
-22. More noise type: blur/scanner
-23. PCA+ICA baseline
+20. More noise type: blur/scanner
+21. PCA+ICA baseline
     - Infomax ~ Yet another loss!
     - Kurtosis/negentropy: use sklearn
-24. Baselines in paper
-25. Manifold-Manifold/Chamfer Measure distance as loss
-    - ~~Use existing Chamfer Loss CUDA impl.~~
+22. Baselines in paper
+23. B-spline interpolation?
+24. Try lighter mlps
+    - seems not reducing too much, since MLPs are not the bottleneck
+
+### Doing List
+21. **Large PC eval test**
+    - Overlap patches?
+1.  **Adversarial noise generator**
+    - Shared param?
+    - Bad generalization: good train loss(0.37), bad on test(0.65)
+    - comparatively slow(5-10 times slower)
+    - give up for now
+2.  **Large-scale test**
+3.  **Investigate other methods**
+    - MRPCA
+    - ...
 
 ### Future Directions
 
@@ -32,24 +42,26 @@
 
 
 ### Comparisons
-| $\sigma$                 | 1    | 5         | 10        |
-| ------------------------ | ---- | --------- | --------- |
-| Original                 | 1    | 25        | 100       |
-| Plain BF                 | 0.30 | 8.76      |           |
-| AmaBF(w/o act)           | 0.13 | 0.50      |           |
-| AmaBF(w/ act)            | 0.13 | 0.425@340 | <0.543@50 |
-| AmaBF(w/ act+g. reg.)    |      | 0.368@300 |           |
-| AmaBF(w/ act+g. reg.+CM) |      | 0.617@50  |           |
-| Adversarial Noisy        |      | Testing   |           |
-| MoNet $\times 4$(w/ act) |      | 0.47@250  |           |
-| DGCNN(w/o act)           |      | 0.74      |           |
-| DGCNN(w/ act)            |      | 0.731@370 |           |
-| GAT(w/o act)             |      | <0.93     |           |
-| GAT(w/ act)              |      | 0.75@290  |           |
+| $\sigma$                        | 1          | 5                                      | 10        |
+| ------------------------------- | ---------- | -------------------------------------- | --------- |
+| Original                        | 1          | 25                                     | 100       |
+| Plain BF                        | 0.30       | 8.76                                   |           |
+| AmaBF(w/o act)                  | 0.13       | 0.50                                   |           |
+| AmaBF(w/ act)                   | 0.13       | 0.425@340                              | <0.543@50 |
+| AmaBF(w/ act+g. reg.)           | 0.188 @ 85 | 0.368@300                              |           |
+| AmaBF(w/ act+g. reg.+CM)        |            | 0.617@50                               |           |
+| AmaBF(w/ act+g. reg.+singleMLP) |            | <0.55 @10                              |           |
+| Adversarial Noisy               |            | on Ad noise: 0.267, on Gaussian: 0.657 |           |
+| MoNet $\times 4$(w/ act)        |            | 0.47@250                               |           |
+| DGCNN(w/o act)                  |            | 0.74                                   |           |
+| DGCNN(w/ act)                   |            | 0.731@370                              |           |
+| GAT(w/o act)                    |            | <0.93                                  |           |
+| GAT(w/ act)                     |            | 0.75@290                               |           |
 - CM: Chamfer Measure:
     $$
     C(S,\hat S)=\frac 1 {|S|}\sum_{s\in S}\min_{\hat s'\in \hat S}\|s-\hat s'\|^2 + \frac 1 {|\hat S|}\sum_{\hat s\in \hat S}\min_{s'\in S}\|s'-\hat s\|^2
     $$
+    - Chamfer loss does not make sense on Color denoising
 - All comparisons @ 100 epochs
 - w/ or w/o activation for GAT seems has no difference on denoising
 - On SGD+M/Nesterov: slightly better generalization compared to Adam
@@ -119,3 +131,6 @@
     - Tried: SGD with M+Nesterov
 13. ~~Add attention? ~~
     - Not neccessary
+14. Manifold-Manifold/Chamfer Measure distance as loss
+    - ~~Use existing Chamfer Loss CUDA impl.~~
+7. ~~Impl. further benchmark metrics~~

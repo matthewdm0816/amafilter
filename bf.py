@@ -249,6 +249,8 @@ class BilateralFilterv2(MessagePassing):
         # self.embedding = Embedding(fout, embedding="MLP", hidden_layers=[256, 128, fout])
         self.fproj = nn.Linear(fin, fout)
         self.embedding = Embedding(fout, embedding="MLP", hidden_layers=[128, fout])
+        # single-layer(faster) alternativeL not fast
+        # self.embedding = Embedding(fout, embedding="MLP", hidden_layers=[fout])
         self.collate = collate
         if collate == "gaussian":
             self.out = module_wrapper(lambda x: torch.exp(-((x) ** 2)))

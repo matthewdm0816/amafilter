@@ -3,8 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 import torch_geometric as tg
+from torch_geometric.data import DataLoader, DataListLoader, InMemoryDataset, Data
+from torch_geometric.nn import knn_graph, radius_graph, MessagePassing
 import colorama, json
 from typing import Optional
+from collections import OrderedDict
+
 
 colorama.init(autoreset=True)
 
@@ -113,13 +117,6 @@ def module_wrapper(f):
 
 
 def parallel_cuda(batch, device):
-    # batchs = [data.to(device) for data in batchs]
-    # reals = [data.pos.to(device) for data in batchs]
-    # # jittered = [ for real in reals]
-    # labels = [data.y for data in batchs] # actually batchs
-    # labels = torch.cat(labels).to(device)
-    # bs = labels.shape[0]
-    # return batchs, reals, labels
     for i, data in enumerate(batch):
         for key in data.keys:
             if torch.is_tensor(data[key]):
@@ -395,6 +392,8 @@ def parse_config(args):
         args.path,
         args.regularization,
         args.loss,
+        torch.device("cuda:%d" % args.gpus[0] if torch.cuda.is_available() else "cpu"),
+        args.batch_size * len(args.gpus)
     )
 
 
@@ -449,3 +448,109 @@ def get_ad_optimizer(
         den_opt, T_max=100, last_epoch=beg_epochs
     )
     return [gen_opt, den_opt], [gen_scheduler, den_scheduler]
+
+class GraphMeaner(MessagePassing):
+    # Take Average on single graph
+    def __init__(self, *args, **kwargs):
+        super().__init__(aggr='mean', *args, **kwargs)
+
+    def message(self, x_j):
+        return x_j
+
+    def forward(self, x, pos, batch=None):
+        edge_index = radius_graph(pos, r=1e-6, batch=batch, loop=True)
+        return self.propagate(edge_index, x=x)
+
+def pre_transform_with_records(data):
+    from dataloader import whiten_with_records
+    # in-place modify
+    data.y, cmean, cstd = whiten_with_records(data.y)
+    data.z, pmean, pstd = whiten_with_records(data.z)
+    return (cmean, pmean), (cstd, pstd)
+
+
+def process_whole(
+    model,
+    ply_path: str,
+    noise_generator,
+    sigma: float=1.0,
+    batch_size: int = 16,
+):
+    r"""
+    Process a whole PC
+    """
+    from mpeg_process import process_ply, read_mesh
+    from train_bf import process_batch
+    from sklearn.cluster import dbscan
+
+    # 1. Read mesh and turn into patches
+    # by assumption, a typical PC contains 1000k points
+    orig_mesh = read_mesh(ply_path)
+    n_pts = orig_mesh.color.shape[0]
+    print(colorama.Fore.MAGENTA + 'Total points: %d @ %s' % (n_pts, ply_path))
+    patches = process_ply(ply_path, n_patch=1000, k=2048)
+    n_pc = len(patches)
+    patches = Data(
+        y=torch.stack([d.color for d in patches]),
+        z=torch.stack([d.pos for d in patches]),
+        kernel_z=torch.stack([d.kernel_pos for d in patches]),
+    )
+
+    # 1a. record STD+MEAN
+    (cmean, pmean), (cstd, pstd) = pre_transform_with_records(patches)
+    print(cmean.shape, cstd.shape) # assumbly [B, 1, F]
+
+    color = torch.stack([patch.color for patch in patches])
+    pos = torch.stack([patch.pos for patch in patches]) # [B, N, F]
+    noise = noise_generator(color, sigma)
+    noisy_color = noise + color
+    assert not torch.any(torch.isnan(color)), "NaN detected!"
+    # divide into list
+    data_list = [Data(x=dx, y=dy, z=dz) for dx, dy, dz in zip(noisy_color, color, pos)]
+    loader = DataListLoader(data_list, batch_size=batch_size, shuffle=False)
+
+    # 2. denoise on patches
+    opatches = []
+    for batch in loader:
+        batch, _ = process_batch(batch, parallel=True, dataset_type='MPEG')
+        out, *loss = model(batch)
+        # compatibility to no mse out nets
+        if len(loss) == 2:
+            loss, mse_loss = loss
+        elif len(loss) == 1:
+            loss, mse_loss = loss[0], loss[0]
+        opatches.append(out) # [B_patch * N, F]
+    opatches = torch.cat(opatches, dim=0) # => [B * N, F]
+    f_pc = opatches.shape[-1]
+    
+    # 3. rebuild whole PC
+    opatches = opatches.view(n_pc, -1, f_pc) # => [B, N, F]
+    ocolor, opos = opatches[:, :, :3], opatches[:, :, 3:]
+    ocolor = ocolor * cstd + cmean
+    opos = opos * pstd + pmean
+    ocolor = ocolor.view(-1, f_pc)
+    opos = opos.view(-1, f_pc)
+
+    # 3a. add overlap
+    # meaner = GraphMeaner().cuda()
+    # ocolor = meaner(ocolor, opos)
+    
+    # # 4. Unique the points
+    # ocolor, opos = ocolor.numpy(), opos.numpy()
+    # cores, labels = dbscan(opos, eps=1e-4, min_samples=1, n_jobs=8)
+    # print(colorama.Fore.MAGENTA + 'Clustered %d points' % cores.shape[0])
+    # ocolor = ocolor[cores]
+    # opos = opos[cores]
+    reconstructed = torch.zeros_like(orig_mesh.color)
+    reconstructed_cnt = torch.zeros([reconstructed.shape[0]])
+    for patch in patches:
+        reconstructed[patch.patch_index] += ocolor
+        reconstructed_cnt[patch.patch_index] += 1.
+    # direct averaging TODO: Use more accurate averaging
+    reconstructed = reconstructed / reconstructed_cnt
+
+    # 5. calc MSE: TODO:
+    mse_error = torch.norm(reconstructed - orig_mesh.color)
+    
+    return reconstructed, orig_mesh, mse_error
+
