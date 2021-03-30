@@ -298,7 +298,7 @@ if __name__ == "__main__":
         "module.filters.2.embedding",
     ]
     optimizer, scheduler = get_optimizer(
-        model, optimizer_type, my_list, 0.002, 0.002 * 10, beg_epochs
+        model, optimizer_type, my_list, 0.002, 0.002, beg_epochs
     )
 
     if model_milestone is not None:

@@ -23,6 +23,7 @@
 ### Doing List
 21. **Large PC eval test**
     - Overlap patches?
+    - Need test
 1.  **Adversarial noise generator**
     - Shared param?
     - Bad generalization: good train loss(0.37), bad on test(0.65)
@@ -42,22 +43,23 @@
 
 
 ### Comparisons
-| $\sigma$                        | 1     | 5         | 10        |
-| ------------------------------- | ----- | --------- | --------- |
-| Original                        | 1     | 25        | 100       |
-| Plain BF                        | 0.30  | 8.76      |           |
-| AmaBF(w/o act)                  | 0.13  | 0.50      |           |
-| AmaBF(w/ act)                   | 0.13  | 0.425@340 | 0.543@50  |
-| AmaBF(w/ act+g. reg.)           | 0.188 | 0.368@300 |           |
-| AmaBF(w/ act+g. reg.+CM)        |       | 0.617@50  |           |
-| AmaBF(w/ act+g. reg.+singleMLP) |       | <0.55 @10 |           |
-| Adversarial Noisy               |       | *         |           |
-| MoNet $\times 4$(w/ act)        |       | 0.47@250  |           |
-| DGCNN(w/o act)                  |       | 0.74      |           |
-| DGCNN(w/ act)                   |       | 0.731@370 |           |
-| GAT(w/o act)                    |       | <0.93     |           |
-| GAT(w/ act)                     |       | 0.75@290  |           |
+| $\sigma$                        | 1     | 5         | 10           |
+| ------------------------------- | ----- | --------- | ------------ |
+| Original                        | 1     | 25        | 100          |
+| Plain BF                        | 0.30  | 8.76      |              |
+| AmaBF(w/o act)                  | 0.13  | 0.50      |              |
+| AmaBF(w/ act)                   | 0.13  | 0.425@340 | 0.543@50     |
+| AmaBF(w/ act+g. reg.)           | 0.188 | 0.368@300 | 0.515@250 ** |
+| AmaBF(w/ act+g. reg.+CM)        |       | 0.617@50  |              |
+| AmaBF(w/ act+g. reg.+singleMLP) |       | <0.55 @10 |              |
+| Adversarial Noisy               |       | *         |              |
+| MoNet $\times 4$(w/ act)        |       | 0.47@250  |              |
+| DGCNN(w/o act)                  |       | 0.74      |              |
+| DGCNN(w/ act)                   |       | 0.731@370 |              |
+| GAT(w/o act)                    |       | <0.93     |              |
+| GAT(w/ act)                     |       | 0.75@290  |              |
 - \* on Ad noise: 0.267, on Gaussian: 0.657
+- \*\* $\lambda=0.01$, minor improvement
 
 - CM: Chamfer Measure:
     $$
@@ -68,6 +70,7 @@
 - w/ or w/o activation for GAT seems has no difference on denoising
 - On SGD+M/Nesterov: slightly better generalization compared to Adam
 - MoNet: wavy performance on test set. although consistently on train set
+- ConsineAnealing appears to be enhancing performance after 2 $T_max$, i.e. re-warmup turn
 
 ### Theory Backgrounds
 
