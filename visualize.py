@@ -10,11 +10,33 @@ from mpl_toolkits.mplot3d import proj3d, Axes3D
 from utils import load_model
 
 
-def get_subplot_proj(ax):
+def get_subplot_proj(ax, scale):
     def short_proj():
         return np.dot(Axes3D.get_proj(ax), scale)
 
     return short_proj
+
+
+def visualize(
+    ax,
+    pos: np.ndarray,
+    color: np.ndarray,
+    subtitle: str = "Original",
+    point_size: float = 0.05,
+):
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_zlabel("z")
+    ax.set_title(subtitle)
+    ax.get_proj = get_subplot_proj(ax)
+    ax.scatter(
+        pos[:, 0],  # x
+        pos[:, 1],  # y
+        pos[:, 2],  # z
+        facecolors=color / 255.0,
+        s=point_size,  # height data for color
+    )
+    ax.view_init(90, -90)
 
 
 if __name__ == "__main__":
@@ -65,6 +87,12 @@ if __name__ == "__main__":
         type=str,
         help="Specify result save path",
     )
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        default=False,
+        help="Sepcify whether to show the PC plot",
+    )
     args = parser.parse_args()
     (
         optimizer_type,
@@ -108,7 +136,11 @@ if __name__ == "__main__":
 
     # Process PLY
     reconstructed, noisy, mesh, mse_error = process_whole(
-        model, ply_path, noise_generator=normal_noise, sigma=sigma, batch_size=batch_size
+        model,
+        ply_path,
+        noise_generator=normal_noise,
+        sigma=sigma,
+        batch_size=batch_size,
     )
 
     # Visualize
@@ -130,52 +162,17 @@ if __name__ == "__main__":
     # original
     ax = fig.add_subplot(131, projection="3d")
 
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_zlabel("z")
-    ax.set_title("Original Point Cloud")
-    ax.get_proj = get_subplot_proj(ax)
-    ax.scatter(
-        pos[:, 0],  # x
-        pos[:, 1],  # y
-        pos[:, 2],  # z
-        facecolors=mesh.color.numpy() / 255.0,
-        s=0.02,  # height data for color
-    )
-    ax.view_init(90, -90)
+    visualize(ax, pos, color, subtitle="Original")
 
     # noisy
     ax = fig.add_subplot(132, projection="3d")
 
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_zlabel("z")
-    ax.set_title("Noisy Point Cloud")
-    ax.get_proj = get_subplot_proj(ax)
-    ax.scatter(
-        pos[:, 0],  # x
-        pos[:, 1],  # y
-        pos[:, 2],  # z
-        facecolors=noisy.numpy() / 255.0,
-        s=0.02,  # height data for color
-    )
-    ax.view_init(90, -90)
+    visualize(ax, pos, noisy.numpy(), subtitle="Noisy")
 
     # reconstructed
     ax = fig.add_subplot(133, projection="3d")
 
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_zlabel("z")
-    ax.set_title("Reconstructed Point Cloud")
-    ax.get_proj = get_subplot_proj(ax)
-    ax.scatter(
-        pos[:, 0],  # x
-        pos[:, 1],  # y
-        pos[:, 2],  # z
-        facecolors=reconstructed.numpy() / 255.0,
-        s=0.02,  # height data for color
-    )
-    ax.view_init(90, -90)
+    visualize(ax, pos, reconstructed.numpy(), subtitle="Reconstructed")
     plt.savefig(save_path, dpi=600)
-    plt.show()
+    if args.show:
+        plt.show()

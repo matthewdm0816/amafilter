@@ -243,12 +243,16 @@ class Embedding(nn.Module):
 
 
 class BilateralFilterv2(MessagePassing):
-    def __init__(self, fin, fout, collate="gaussian"):
+    def __init__(self, fin, fout, collate="gaussian", merge_embedding: bool = False):
         super().__init__(aggr="add")
         # TODO: Alternative simplification
-        # self.embedding = Embedding(fout, embedding="MLP", hidden_layers=[256, 128, fout])
-        self.fproj = nn.Linear(fin, fout)
-        self.embedding = Embedding(fout, embedding="MLP", hidden_layers=[128, fout])
+        self.merge_embedding = merge_embedding
+        self.fproj = nn.Linear(fin, fout) if not merge_embedding else nn.Identity()
+        self.embedding = Embedding(
+            fout if not merge_embedding else fin,
+            embedding="MLP",
+            hidden_layers=[128, fout],
+        )
         # single-layer(faster) alternativeL not fast
         # self.embedding = Embedding(fout, embedding="MLP", hidden_layers=[fout])
         self.collate = collate
@@ -368,7 +372,7 @@ class AmaFilter(nn.Module):
     ):
         super().__init__()
         self.fin, self.fout, self.k = fin, fout, k
-        self.loss_type= loss_type if loss_type is not None else "mse"
+        self.loss_type = loss_type if loss_type is not None else "mse"
         hidden_layers = [fin, 64 + fin, 128 + 64 + fin, fout]
         # total = 0
         # for idx, h in enumerate(hidden_layers):
@@ -424,7 +428,7 @@ class AmaFilter(nn.Module):
             loss = mse(x, target)
         elif self.loss_type == "chamfer":
             loss = chamfer_measure(x, target, batch)
-        else: 
+        else:
             raise NotImplementedError
         # loss = self.loss(x, target)
         mse_loss = mse(x, target)

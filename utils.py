@@ -269,12 +269,6 @@ def get_model(
     from utils import mse, chamfer_measure
 
     assert loss_type in ["mse", "chamfer"]
-    # if loss_type == "mse":
-    #     loss = mse
-    # elif loss_type == "chamfer":
-    #     loss = lambda x, y: chamfer_measure(x, y, batch_size=batch_size)
-    # else:
-    #     raise NotImplementedError
 
     if dataset_type == "MN40":
         model = AmaFilter(
@@ -295,6 +289,7 @@ def get_model(
             activation=activation,
             reg=reg,
             loss_type=loss_type,
+            merge_embedding=False
         )
         print(colorama.Fore.MAGENTA + "Using filter type %s" % bfilter.__name__)
 
@@ -323,11 +318,6 @@ def get_optimizer(model, optimizer_type, my_list, lr, alt_lr, beg_epochs):
     elif optimizer_type == "SGD":
         # Using SGD Nesterov-accelerated with Momentum
         # Selective lr adjustment
-        # my_list = [
-        #     "module.filters.0.embedding",
-        #     "module.filters.1.embedding",
-        #     "module.filters.2.embedding",
-        # ]
         params = list(
             map(
                 lambda x: x[1],
@@ -373,8 +363,14 @@ def get_optimizer(model, optimizer_type, my_list, lr, alt_lr, beg_epochs):
             momentum=0.9,
             nesterov=True,
         )
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=100, last_epoch=beg_epochs
+    
+    # scheduler = optim.lr_scheduler.CosineAnnealingLR(
+    #     optimizer, T_max=100, last_epoch=beg_epochs
+    # )
+    # Quick cosine annealing
+    # 30 -> 33 -> 36 -> 40 etc.
+    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer, T_0=30, T_mult=1, last_epoch=beg_epochs, eta_min=1e-6
     )
     return optimizer, scheduler
 

@@ -19,6 +19,12 @@
 23. B-spline interpolation?
 24. Try lighter mlps
     - seems not reducing too much, since MLPs are not the bottleneck
+25. What parameters are there in our network?
+    - MLP, $f_\phi(x)$ for each layer
+    - $\Theta$, feature projection for each layer
+    - Merge $\Theta, f_\phi$?
+      - Need test, not necessary
+    - => Try 1/2 layer of BFs?
 
 ### Doing List
 21. **Large PC eval test**
@@ -30,9 +36,12 @@
     - comparatively slow(5-10 times slower)
     - give up for now
 2.  **Large-scale test**
+    - cosine annealing with **quick** warmup restarts(LR Plan)
 3.  **Investigate other methods**
     - MRPCA
     - ...
+4. **Visualize denoising result**
+    - Need test
 
 ### Future Directions
 
@@ -43,21 +52,22 @@
 
 
 ### Comparisons
-| $\sigma$                        | 1     | 5         | 10           |
-| ------------------------------- | ----- | --------- | ------------ |
-| Original                        | 1     | 25        | 100          |
-| Plain BF                        | 0.30  | 8.76      |              |
-| AmaBF(w/o act)                  | 0.13  | 0.50      |              |
-| AmaBF(w/ act)                   | 0.13  | 0.425@340 | 0.543@50     |
-| AmaBF(w/ act+g. reg.)           | 0.188 | 0.368@300 | 0.515@250 ** |
-| AmaBF(w/ act+g. reg.+CM)        |       | 0.617@50  |              |
-| AmaBF(w/ act+g. reg.+singleMLP) |       | <0.55 @10 |              |
-| Adversarial Noisy               |       | *         |              |
-| MoNet $\times 4$(w/ act)        |       | 0.47@250  |              |
-| DGCNN(w/o act)                  |       | 0.74      |              |
-| DGCNN(w/ act)                   |       | 0.731@370 |              |
-| GAT(w/o act)                    |       | <0.93     |              |
-| GAT(w/ act)                     |       | 0.75@290  |              |
+| $\sigma$                  | 1     | 5         | 10           |
+| ------------------------- | ----- | --------- | ------------ |
+| Original                  | 1     | 25        | 100          |
+| Plain BF                  | 0.30  | 8.76      |              |
+| BF(-act)                  | 0.13  | 0.50      |              |
+| BF(act)                   | 0.13  | 0.425@340 | 0.543@50     |
+| BF(act+warmup)            |       |           | 0.535@105    |
+| BF(act+g. reg.)           | 0.188 | 0.368@300 | 0.510@290 ** |
+| BF(act+g. reg.+CM)        |       | 0.617@50  |              |
+| BF(act+g. reg.+singleMLP) |       | <0.55@10  |              |
+| Adversarial Noisy         |       | *         |              |
+| MoNet $\times 4$(act)     |       | 0.47@250  |              |
+| DGCNN(-act)               |       | 0.74      |              |
+| DGCNN(act)                |       | 0.731@370 |              |
+| GAT(-act)                 |       | <0.93     |              |
+| GAT(act)                  |       | 0.75@290  |              |
 - \* on Ad noise: 0.267, on Gaussian: 0.657
 - \*\* $\lambda=0.01$, minor improvement
 
