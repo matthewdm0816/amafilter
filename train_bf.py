@@ -33,8 +33,8 @@ import torch
 import torch.optim as optim
 
 # limit CPU usage
-torch.set_num_threads(8)
-torch.set_num_interop_threads(8)
+torch.set_num_threads(16)
+torch.set_num_interop_threads(16)
 print(
     colorama.Fore.GREEN
     + "Using %d/%d cores/threads of CPU"
@@ -66,6 +66,7 @@ assert optimizer_type in ["Adam", "SGD"]
 dataset_type = "MPEG"
 assert dataset_type in ["MPEG", "MN40"]
 bfilter = BilateralFilterv2
+
 
 def copy_batch(batch):
     if isinstance(batch, list):
@@ -117,7 +118,14 @@ def process_batch(batch, parallel, dataset_type):
 
 
 def train(
-    model, optimizer, scheduler, loader, dataset_type, parallel: bool, epoch: int, return_lr: bool=False
+    model,
+    optimizer,
+    scheduler,
+    loader,
+    dataset_type,
+    parallel: bool,
+    epoch: int,
+    return_lr: bool = False,
 ):
     """
     NOTE: Need DROP_LAST=TRUE, in case batch length is not uniform
@@ -222,17 +230,53 @@ if __name__ == "__main__":
     # parse args
     parser = ArgumentParser()
     # ...TODO
-    parser.add_argument("-o", "--optimizer", type=str, help="Specify optimizer kind", nargs="?", const="SGD")
+    parser.add_argument(
+        "-o",
+        "--optimizer",
+        type=str,
+        help="Specify optimizer kind",
+        nargs="?",
+        const="SGD",
+    )
     parser.add_argument("-d", "--dataset", type=str, help="Specify dataset")
     parser.add_argument("-p", "--path", type=str, help="Specify dataset path")
     parser.add_argument("-b", "--batchsize", type=int, help="Batchsize/GPU of training")
-    parser.add_argument("-t", "--total", type=int, help="Total epochs", nargs="?", const=500)
+    parser.add_argument(
+        "-t", "--total", type=int, help="Total epochs", nargs="?", const=500
+    )
     parser.add_argument("-m", "--model", type=str, help="Specify model type")
     parser.add_argument("--gpus", type=int, nargs="+")
-    parser.add_argument("-r", "--regularization", type=float, help="Specify graph regularization strength, 0 stands for none", nargs="?", const=0.)
-    parser.add_argument("-l", "--loss", type=str, help="Specify loss type", nargs="?", const="mse") # alternative: chamfer
+    parser.add_argument(
+        "-r",
+        "--regularization",
+        type=float,
+        help="Specify graph regularization strength, 0 stands for none",
+        nargs="?",
+        const=0.0,
+    )
+    parser.add_argument(
+        "-l", "--loss", type=str, help="Specify loss type", nargs="?", const="mse"
+    )  # alternative: chamfer
+    parser.add_argument(
+        "-c", "--collate", type=str, help="Specify collate mathod", default="gaussian"
+    )
     args = parser.parse_args()
-    optimizer_type, dataset_type, gpu_ids, gpu_id, ngpu, parallel, epochs, model_name, data_path, regularization, loss_type, device, batch_size = parse_config(args)
+    (
+        optimizer_type,
+        dataset_type,
+        gpu_ids,
+        gpu_id,
+        ngpu,
+        parallel,
+        epochs,
+        model_name,
+        data_path,
+        regularization,
+        loss_type,
+        device,
+        batch_size,
+        collate,
+    ) = parse_config(args)
 
     # get training IDs
     timestamp = init_train(parallel, gpu_ids)
@@ -280,14 +324,15 @@ if __name__ == "__main__":
         dataset_type,
         bfilter,
         device,
-        batch_size= batch_size // ngpu, # batch_size on single GPU
+        batch_size=batch_size // ngpu,  # batch_size on single GPU
         activation=True,
         parallel=parallel,
         use_sbn=True,
         gpu_ids=gpu_ids,
         gpu_id=gpu_id,
         reg=regularization,
-        loss_type=loss_type
+        loss_type=loss_type,
+        collate=collate,
     )
 
     # show named modules
@@ -319,7 +364,14 @@ if __name__ == "__main__":
 
     for epoch in trange(beg_epochs, epochs + 1):
         train_mse, train_psnr, train_orig_psnr, current_lr = train(
-            model, optimizer, scheduler, train_loader, dataset_type, parallel, epoch, return_lr=True
+            model,
+            optimizer,
+            scheduler,
+            train_loader,
+            dataset_type,
+            parallel,
+            epoch,
+            return_lr=True,
         )
         eval_mse, eval_psnr, test_orig_psnr = evaluate(
             model, test_loader, dataset_type, parallel, epoch
@@ -332,14 +384,16 @@ if __name__ == "__main__":
             else:
                 model_to_save = model
             torch.save(
-                model_to_save.state_dict(), os.path.join(model_path, "model-%d.save" % (epoch))
+                model_to_save.state_dict(),
+                os.path.join(model_path, "model-%d.save" % (epoch)),
             )
             torch.save(
                 optimizer.state_dict(),
                 os.path.join(model_path, "opt-%d.save" % (epoch)),
             )
             torch.save(
-                model_to_save.state_dict(), os.path.join(model_path, "model-latest.save")
+                model_to_save.state_dict(),
+                os.path.join(model_path, "model-latest.save"),
             )
             torch.save(
                 optimizer.state_dict(), os.path.join(model_path, "opt-latest.save")

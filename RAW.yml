@@ -1,0 +1,13 @@
+---
+type: RAW
+collate: gaussian
+loss: mse
+optimizer: SGD
+dataset: MPEG
+batchsize: 24
+total: 500
+gpus: [0, 1]
+regularization: 0.01
+path: "data-10.0"
+model: "mpeg-bf-10.0v3sgd+RAW+cauchy"
+...

@@ -24,6 +24,7 @@ import random, math, colorama
 from tqdm import *
 from scaffold import Scaffold
 from utils import *
+from icecream import ic
 
 scaf = Scaffold()
 scaf.debug()
@@ -256,12 +257,17 @@ class BilateralFilterv2(MessagePassing):
         # single-layer(faster) alternativeL not fast
         # self.embedding = Embedding(fout, embedding="MLP", hidden_layers=[fout])
         self.collate = collate
+        ic(self.collate)
         if collate == "gaussian":
             self.out = module_wrapper(lambda x: torch.exp(-((x) ** 2)))
         elif collate == "exponential":
             self.out = module_wrapper(lambda x: torch.exp(-(x)))
         elif collate == "fractional":
             self.out = module_wrapper(lambda x: (x) ** (-2))
+        elif collate == "polynomial":
+            self.out = module_wrapper(lambda x: (x) ** 2)
+        elif collate == "cauchy":
+            self.out = module_wrapper(lambda x: 1. / (1. + x ** 2))
         sprint(
             "Created BilateralFilterv2 {:d} => {:d}, hidden: {}".format(
                 fin, fout, [128]
@@ -318,6 +324,86 @@ class BilateralFilterv2(MessagePassing):
         return self.propagate(edge_index, x=x, norm=norm, edge_weight=edge_weight)
 
 
+class BilateralFilterv4(MessagePassing):
+    def __init__(self, fin, fout, collate="gaussian", merge_embedding: bool = False):
+        super().__init__(aggr="add")
+        # TODO: Alternative simplification
+        self.merge_embedding = merge_embedding
+        self.fproj = nn.Linear(fin, fout) if not merge_embedding else nn.Identity()
+        self.embedding = Embedding(
+            fout if not merge_embedding else fin,
+            embedding="MLP",
+            hidden_layers=[128, fout],
+        )
+        # single-layer(faster) alternativeL not fast
+        # self.embedding = Embedding(fout, embedding="MLP", hidden_layers=[fout])
+        self.collate = collate
+        ic(self.collate)
+        if collate == "gaussian":
+            self.out = module_wrapper(lambda x: torch.exp(-((x) ** 2)))
+        elif collate == "exponential":
+            self.out = module_wrapper(lambda x: torch.exp(-(x)))
+        elif collate == "fractional":
+            self.out = module_wrapper(lambda x: (x) ** (-2))
+        elif collate == "polynomial":
+            self.out = module_wrapper(lambda x: (x) ** 2)
+        elif collate == "cauchy":
+            self.out = module_wrapper(lambda x: 1. / (1. + x ** 2))
+        sprint(
+            "Created BilateralFilterv4 {:d} => {:d}, hidden: {}".format(
+                fin, fout, [128]
+            )
+        )
+
+    def _weighted_degree(self, edge_index, edge_weight, num_nodes):
+        """
+        edge_index ~ [E, ] of to-index of an edge
+        edge_weight ~ [E, ]
+        Return ~ [N, ]
+        """
+        # normalize
+        # sprint(edge_index.shape, edge_weight.shape, num_nodes)
+        # print(edge_index.shape, edge_weight.shape)
+        out = torch.zeros((num_nodes,)).to(edge_weight)
+        return out.scatter_add_(dim=0, index=edge_index, src=edge_weight)
+
+    def _edge_weight(self, x_i, x_j):
+        """
+        x_i, x_j ~ E * FIN
+        out ~ E * 1
+        """
+        # TODO: explicitly show embeddings of xs
+        return self.out(torch.norm(x_i - x_j, dim=1)) + 1e-9
+
+    def message(self, x_i, x_j, norm, edge_weight):
+        y = norm.view(-1, 1) * edge_weight.view(-1, 1) * x_j
+        # selective clamp
+        return torch.clamp(y, -10, 10)
+
+    def forward(self, x, edge_index):
+        """
+        x ~ N * FIN
+        edge_index ~ 2 * E
+        """
+        x = self.fproj(x)  # => N * FOUT
+        e = self.embedding(x)  # => N * FOUT through embedding layer
+
+        n_nodes = x.size(0)
+
+        # Compute edge weight
+        row, col = edge_index
+        e_i, e_j = e[row], e[col]
+        # edge_weight: E * FOUT
+        edge_weight = self._edge_weight(e_i, e_j)
+
+        # Compute normalization W = D^{-1}W ~ Random Walk Laplacian
+        # TODO: Variable Norm, Sym/None
+        deg = self._weighted_degree(col, edge_weight, n_nodes)
+        norm = deg.pow(-1.0)
+        norm = norm[row]  # norm[i] = norm[row[i] ~ indexof(x_i)]
+        # => E * 1
+        return self.propagate(edge_index, x=x, norm=norm, edge_weight=edge_weight)
+
 class GraphRegularizer(MessagePassing):
     def __init__(self):
         super().__init__(aggr="add")
@@ -369,6 +455,8 @@ class AmaFilter(nn.Module):
         activation: bool = True,
         reg: float = 0.0,
         loss_type: Optional[str] = None,
+        merge_embedding: bool = False, 
+        collate: str='gaussian'
     ):
         super().__init__()
         self.fin, self.fout, self.k = fin, fout, k
@@ -380,9 +468,9 @@ class AmaFilter(nn.Module):
         #     hidden_layers[idx] = total
         self.filters = nn.ModuleList(
             [
-                filter(fin, 64),
-                filter(64 + fin, 128),
-                filter(64 + fin + 128, fout),
+                filter(fin, 64, merge_embedding=merge_embedding, collate=collate),
+                filter(64 + fin, 128, merge_embedding=merge_embedding, collate=collate),
+                filter(64 + fin + 128, fout, merge_embedding=merge_embedding, collate=collate),
             ]
         )
         self.has_activation = activation

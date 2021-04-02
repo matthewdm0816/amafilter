@@ -1,3 +1,4 @@
+# from os import O_PATH
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -8,7 +9,9 @@ from torch_geometric.nn import knn_graph, radius_graph, MessagePassing
 import colorama, json
 from typing import Optional
 from collections import OrderedDict
-
+import pretty_errors
+from icecream import ic
+from tqdm import tqdm, trange
 
 colorama.init(autoreset=True)
 
@@ -82,7 +85,14 @@ def init_weights(model):
 
 
 def load_model(model, optimizer, f: str, optim: str, e: int, evaluate=None):
-    model.load_state_dict(torch.load(f))
+    loaded = torch.load(f)
+    try:
+        loaded = loaded.module
+        ic(loaded)
+    except:
+        ic()
+        pass
+    model.load_state_dict(loaded)
     print("Loaded milestone with epoch %d at %s" % (e, f))
     if optim is not None:
         optimizer.load_state_dict(torch.load(optim))
@@ -263,6 +273,7 @@ def get_model(
     gpu_id=0,
     reg: float = 0.0,
     loss_type: str = "mse",
+    collate: str = "gaussian",
 ):
     from bf import AmaFilter
     from torch_geometric.nn import DataParallel
@@ -279,6 +290,7 @@ def get_model(
             filter=bfilter,
             reg=reg,
             loss_type=loss_type,
+            collate=collate,
         )
     elif dataset_type == "MPEG":
         model = AmaFilter(
@@ -289,7 +301,8 @@ def get_model(
             activation=activation,
             reg=reg,
             loss_type=loss_type,
-            merge_embedding=False
+            merge_embedding=False,
+            collate=collate,
         )
         print(colorama.Fore.MAGENTA + "Using filter type %s" % bfilter.__name__)
 
@@ -308,10 +321,10 @@ def get_optimizer(model, optimizer_type, my_list, lr, alt_lr, beg_epochs):
     if optimizer_type == "Adam":
         optimizer = optim.Adam(
             [
-                {"params": model.parameters(), "initial_lr": 0.002},
+                {"params": model.parameters(), "initial_lr": lr},
                 # {"params": model.parameters(), "initial_lr": 0.002}
             ],
-            lr=0.002,
+            lr=lr,
             weight_decay=5e-4,
             betas=(0.9, 0.999),
         )
@@ -363,14 +376,14 @@ def get_optimizer(model, optimizer_type, my_list, lr, alt_lr, beg_epochs):
             momentum=0.9,
             nesterov=True,
         )
-    
+
     # scheduler = optim.lr_scheduler.CosineAnnealingLR(
     #     optimizer, T_max=100, last_epoch=beg_epochs
     # )
-    # Quick cosine annealing
-    # 30 -> 33 -> 36 -> 40 etc.
+    # Cosine annealing with restarts
+    # etc.
     scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer, T_0=30, T_mult=1, last_epoch=beg_epochs, eta_min=1e-6
+        optimizer, T_0=100, T_mult=1, last_epoch=beg_epochs, eta_min=1e-6
     )
     return optimizer, scheduler
 
@@ -389,7 +402,8 @@ def parse_config(args):
         args.regularization,
         args.loss,
         torch.device("cuda:%d" % args.gpus[0] if torch.cuda.is_available() else "cpu"),
-        args.batchsize * len(args.gpus)
+        args.batchsize * len(args.gpus),
+        args.collate,
     )
 
 
@@ -445,10 +459,11 @@ def get_ad_optimizer(
     )
     return [gen_opt, den_opt], [gen_scheduler, den_scheduler]
 
+
 class GraphMeaner(MessagePassing):
     # Take Average on single graph
     def __init__(self, *args, **kwargs):
-        super().__init__(aggr='mean', *args, **kwargs)
+        super().__init__(aggr="mean", *args, **kwargs)
 
     def message(self, x_j):
         return x_j
@@ -457,11 +472,13 @@ class GraphMeaner(MessagePassing):
         edge_index = radius_graph(pos, r=1e-6, batch=batch, loop=True)
         return self.propagate(edge_index, x=x)
 
+
 def pre_transform_with_records(data):
     from dataloader import whiten_with_records
+
     # in-place modify
-    data.y, cmean, cstd = whiten_with_records(data.y)
-    data.z, pmean, pstd = whiten_with_records(data.z)
+    data.color, cmean, cstd = whiten_with_records(data.color)
+    data.pos, pmean, pstd = whiten_with_records(data.pos)
     return (cmean, pmean), (cstd, pstd)
 
 
@@ -469,8 +486,12 @@ def process_whole(
     model,
     ply_path: str,
     noise_generator,
-    sigma: float=1.0,
+    sigma: float = 1.0,
     batch_size: int = 16,
+    parallel: bool = False,
+    ignore_denoise: bool = False,
+    n_patch: int=1000,
+    patch_size: int=2048
 ):
     r"""
     Process a whole PC
@@ -483,69 +504,94 @@ def process_whole(
     # by assumption, a typical PC contains 1000k points
     orig_mesh = read_mesh(ply_path)
     n_pts = orig_mesh.color.shape[0]
-    print(colorama.Fore.MAGENTA + 'Total points: %d @ %s' % (n_pts, ply_path))
-    patches = process_ply(ply_path, n_patch=1000, k=2048)
+    ic(orig_mesh.color.shape)
+    print(colorama.Fore.MAGENTA + "Total points: %d @ %s" % (n_pts, ply_path))
+    ic("Taking patches of ", n_patch)
+    patches = process_ply(ply_path, n_patch=n_patch, k=patch_size)
+    # saved patch_index info here
     n_pc = len(patches)
     patches = Data(
-        y=torch.stack([d.color for d in patches]),
-        z=torch.stack([d.pos for d in patches]),
-        kernel_z=torch.stack([d.kernel_pos for d in patches]),
+        color=torch.stack([d.color for d in patches]),
+        pos=torch.stack([d.pos for d in patches]),
+        patch_index=torch.stack([d.patch_index for d in patches]),  # [B, N]
     )
 
     # 1a. record STD+MEAN
     (cmean, pmean), (cstd, pstd) = pre_transform_with_records(patches)
-    print(cmean.shape, cstd.shape) # assumbly [B, 1, F]
+    ic(cmean.shape, cstd.shape) 
+    ic(pmean.shape, pstd.shape)  # assumbly [B, 1, F]
 
-    color = torch.stack([patch.color for patch in patches])
-    pos = torch.stack([patch.pos for patch in patches]) # [B, N, F]
+    color, pos = patches.color, patches.pos
     noise = noise_generator(color, sigma)
     noisy_color = noise + color
     assert not torch.any(torch.isnan(color)), "NaN detected!"
     # divide into list
     data_list = [Data(x=dx, y=dy, z=dz) for dx, dy, dz in zip(noisy_color, color, pos)]
-    loader = DataListLoader(data_list, batch_size=batch_size, shuffle=False)
+    if parallel:
+        loader = DataListLoader(data_list, batch_size=batch_size, shuffle=False)
+    else:
+        loader = DataLoader(data_list, batch_size=batch_size, shuffle=False)
 
     # 2. denoise on patches
     opatches = []
-    for batch in loader:
-        batch, _ = process_batch(batch, parallel=True, dataset_type='MPEG')
-        out, *loss = model(batch)
-        # compatibility to no mse out nets
-        if len(loss) == 2:
-            loss, mse_loss = loss
-        elif len(loss) == 1:
-            loss, mse_loss = loss[0], loss[0]
-        opatches.append(out) # [B_patch * N, F]
-    opatches = torch.cat(opatches, dim=0) # => [B * N, F]
-    f_pc = opatches.shape[-1]
-    
+    ic(len(loader))
+    if not ignore_denoise:
+        model.eval()
+        with torch.no_grad():
+            for batch in tqdm(loader, total=len(loader)):
+                batch, _ = process_batch(batch, parallel=parallel, dataset_type="MPEG")
+                # ic(batch, batch.batch)
+                if not parallel:
+                    batch.batch = batch.batch.long()  # NOTE: why?
+                out, *loss = model(batch)
+                # compatibility to no mse out nets
+                ic(loss)
+                if len(loss) == 2:
+                    loss, mse_loss = loss
+                elif len(loss) == 1:
+                    loss, mse_loss = loss[0], loss[0]
+                opatches.append(out)  # [B_patch * N, F]
+        opatches = torch.cat(opatches, dim=0)  # => [B * N, F]
+        f_pc = opatches.shape[-1]
+        opatches = opatches.view(n_pc, -1, f_pc)  # => [B, N, F]
+    else:
+        opatches = torch.randn([n_pc, 2048, 6])
+
     # 3. rebuild whole PC
-    opatches = opatches.view(n_pc, -1, f_pc) # => [B, N, F]
     ocolor, opos = opatches[:, :, :3], opatches[:, :, 3:]
+    ic(ocolor.shape, opos.shape)
+    
+    ocolor = ocolor.cpu()
+
     ocolor = ocolor * cstd + cmean
-    opos = opos * pstd + pmean
+    noisy_color = noisy_color * cstd + cmean
+    # use original position
+    # opos = torch.from_numpy(orig_mesh.pos)
     # ocolor = ocolor.view(-1, f_pc)
     # opos = opos.view(-1, f_pc)
 
     reconstructed = torch.zeros_like(orig_mesh.color)
-    reconstructed_cnt = torch.zeros([reconstructed.shape[0]])
-    for patch, patch_color in zip(patches, ocolor):
-        reconstructed[patch.patch_index] += patch_color
-        reconstructed_cnt[patch.patch_index] += 1.
-    # direct averaging TODO: Use more accurate averaging
-    reconstructed = reconstructed / reconstructed_cnt
+    reconstructed_cnt = torch.ones([reconstructed.shape[0]]) * 1e-7
+    for patch_index, patch_color in zip(patches.patch_index, ocolor):
+        reconstructed[patch_index] += patch_color
+        reconstructed_cnt[patch_index] += 1.0
 
+    ic(reconstructed_cnt.max(), reconstructed_cnt.min())
+    # direct averaging
+    # TODO: Use more accurate averaging
+    ic(reconstructed.shape, reconstructed_cnt.shape)
+    reconstructed = reconstructed / reconstructed_cnt.view(-1, 1)
     # 3b. rebuild noisy PC
     noisy = torch.zeros_like(orig_mesh.color)
-    noisy_cnt = torch.zeros([noisy.shape[0]])
-    for patch, patch_color in zip(patches, noisy_color):
-        noisy[patch.patch_index] += patch_color
-        noisy_cnt[patch.patch_index] += 1.
-    # direct averaging TODO: Use more accurate averaging
-    noisy = noisy / noisy_cnt
+    noisy_cnt = torch.ones([noisy.shape[0]]) * 1e-7
+    for patch_index, patch_color in zip(patches.patch_index, noisy_color):
+        noisy[patch_index] += patch_color
+        noisy_cnt[patch_index] += 1.0
+    # direct averaging 
+    # TODO: Use more accurate averaging
+    noisy = noisy / noisy_cnt.view(-1, 1)
 
     # 4. calc MSE
     mse_error = torch.norm(reconstructed - orig_mesh.color)
-    
-    return reconstructed, noisy, orig_mesh, mse_error
 
+    return reconstructed, noisy, orig_mesh, mse_error

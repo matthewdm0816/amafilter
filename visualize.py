@@ -93,6 +93,9 @@ if __name__ == "__main__":
         default=False,
         help="Sepcify whether to show the PC plot",
     )
+    parser.add_argument(
+        "-c", "--collate", type=str, help="Specify collate mathod", default="gaussian"
+    )
     args = parser.parse_args()
     (
         optimizer_type,
@@ -108,11 +111,12 @@ if __name__ == "__main__":
         loss_type,
         device,
         batch_size,
+        collate
     ) = parse_config(args)
     ply_path, model_path, save_path = args.ply_path, args.model_path, args.save_path
     sigma = args.sigma
 
-    # Get model
+    # 1. Get model
     model = get_model(
         dataset_type=dataset_type,
         device=device,
@@ -123,8 +127,7 @@ if __name__ == "__main__":
         loss_type=loss_type,
     )
 
-    # TODO: Load model
-    # ...
+    # 2. Load model
     load_model(
         model=model.module if parallel else model,
         optimizer=None,
@@ -134,7 +137,7 @@ if __name__ == "__main__":
         evaluate=None,
     )
 
-    # Process PLY
+    # 3. Process PLY
     reconstructed, noisy, mesh, mse_error = process_whole(
         model,
         ply_path,
@@ -143,7 +146,10 @@ if __name__ == "__main__":
         batch_size=batch_size,
     )
 
-    # Visualize
+    reconstructed, noisy = reconstructed.numpy(), noisy.numpy()
+
+    # 4. Visualize
+    # 4a. Compute 3D scale
     color, pos = mesh.color.numpy(), mesh.pos.numpy()
     x_scale = pos[:, 0].max()
     y_scale = pos[:, 1].max()
@@ -159,20 +165,17 @@ if __name__ == "__main__":
     fig = plt.figure(figsize=(20 * cm, 60 * cm))
     fig.subplots_adjust(bottom=-0.15, top=1.2)
 
+    # 4b. Plot PCs
     # original
     ax = fig.add_subplot(131, projection="3d")
-
     visualize(ax, pos, color, subtitle="Original")
-
     # noisy
     ax = fig.add_subplot(132, projection="3d")
-
-    visualize(ax, pos, noisy.numpy(), subtitle="Noisy")
-
+    visualize(ax, pos, noisy, subtitle="Noisy")
     # reconstructed
     ax = fig.add_subplot(133, projection="3d")
+    visualize(ax, pos, reconstructed, subtitle="Reconstructed")
 
-    visualize(ax, pos, reconstructed.numpy(), subtitle="Reconstructed")
     plt.savefig(save_path, dpi=600)
     if args.show:
         plt.show()

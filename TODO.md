@@ -15,6 +15,7 @@
 21. PCA+ICA baseline
     - Infomax ~ Yet another loss!
     - Kurtosis/negentropy: use sklearn
+    - Need Test `pcaica.py`
 22. Baselines in paper
 23. B-spline interpolation?
 24. Try lighter mlps
@@ -25,23 +26,29 @@
     - Merge $\Theta, f_\phi$?
       - Need test, not necessary
     - => Try 1/2 layer of BFs?
+1.  Adversarial noise generator
+    - Shared param?
+    - Bad generalization: good train loss(0.37), bad on test(0.65)
+    - comparatively slow(5-10 times slower)
+    - pause for now
+2. Impl. YAML config parser
+3. Add Configurator class
+    - Use it.
 
 ### Doing List
 21. **Large PC eval test**
     - Overlap patches?
     - Need test
-1.  **Adversarial noise generator**
-    - Shared param?
-    - Bad generalization: good train loss(0.37), bad on test(0.65)
-    - comparatively slow(5-10 times slower)
-    - give up for now
 2.  **Large-scale test**
-    - cosine annealing with **quick** warmup restarts(LR Plan)
+    - cosine annealing with **normal-paced** warmup restarts(LR Plan)
 3.  **Investigate other methods**
     - MRPCA
     - ...
 4. **Visualize denoising result**
     - Need test
+    - RAW0-10.0: too smoothed. lossed match, but too smoothed
+    - Try without regularization!
+    - Try small sigma datasets
 
 ### Future Directions
 
@@ -52,24 +59,32 @@
 
 
 ### Comparisons
-| $\sigma$                  | 1     | 5         | 10           |
-| ------------------------- | ----- | --------- | ------------ |
-| Original                  | 1     | 25        | 100          |
-| Plain BF                  | 0.30  | 8.76      |              |
-| BF(-act)                  | 0.13  | 0.50      |              |
-| BF(act)                   | 0.13  | 0.425@340 | 0.543@50     |
-| BF(act+warmup)            |       |           | 0.535@105    |
-| BF(act+g. reg.)           | 0.188 | 0.368@300 | 0.510@290 ** |
-| BF(act+g. reg.+CM)        |       | 0.617@50  |              |
-| BF(act+g. reg.+singleMLP) |       | <0.55@10  |              |
-| Adversarial Noisy         |       | *         |              |
-| MoNet $\times 4$(act)     |       | 0.47@250  |              |
-| DGCNN(-act)               |       | 0.74      |              |
-| DGCNN(act)                |       | 0.731@370 |              |
-| GAT(-act)                 |       | <0.93     |              |
-| GAT(act)                  |       | 0.75@290  |              |
+| $\sigma$              | 1        | 5         | 10             |
+| --------------------- | -------- | --------- | -------------- |
+| Original              | 1        | 25        | 100            |
+| Plain BF              | 0.30     | 8.76      |                |
+| BF(-act)              | 0.13     | 0.50      |                |
+| BF(act)               | 0.13     | 0.425@340 | 0.543@50       |
+| BF(AW)                | On Query | On Query  | 0.529@290      |
+| BF(RA)                | 0.188    | 0.368@300 | 0.510@290 \*\* |
+| BF(RAW(30))           |          |           | 0.533@140      |
+| BF(RAW(100))          | On Query | On Query  | \*\*\*         |
+| BF(RAW+Cauchy kernel) | On Query | 0.455@160 | 0.506@165      |
+| BF(AR+CM)             |          | 0.617@50  |                |
+| BF(AR+singleMLP)      |          | <0.55@10  |                |
+| Adversarial Noisy     |          | *         |                |
+| MoNet $\times 4$(act) |          | 0.47@250  |                |
+| DGCNN(-act)           |          | 0.74      |                |
+| DGCNN(act)            |          | 0.731@370 |                |
+| GAT(-act)             |          | <0.93     |                |
+| GAT(act)              |          | 0.75@290  |                |
 - \* on Ad noise: 0.267, on Gaussian: 0.657
 - \*\* $\lambda=0.01$, minor improvement
+- \*\*\* minor changes
+- R ~ w/ regularization
+- A ~ activation between filter layers
+- W ~ warmup restart each 100 epoch
+- Cauchy kernel: $f(x)=\frac{1}{1+x^2}$
 
 - CM: Chamfer Measure:
     $$
@@ -121,8 +136,13 @@
 6. AmaFilter(BF): activation-free is OK
    $$
    \bold X^{l+1}=\sigma(\bold D^{-1}_{W}\bold W\bold X^{l}\bold \Theta)\\
-   w_{ij}=\exp(-\|\bold \phi(\bold x'_i)-\phi(\bold x'_j)\|^2)
+   w_{ij}=f_c(\|\bold \phi(\bold x'_i)-\phi(\bold x'_j)\|^2)\\
+   f_c(x)\in\{e^{-x^2}(\text{高斯}), \frac 1 {1+x^2}\text{(柯西)}\}
    $$
+   - use low-rank orthogonal kernel:
+    $$
+    w_{ij} = {x'}_i^TLL^T{x'}_j, \bold L\in \R^{n\times l}
+    $$
 
 ### Done TODOs
 
